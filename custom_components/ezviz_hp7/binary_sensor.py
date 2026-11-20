@@ -419,7 +419,10 @@ class Hp7BinaryAlarm(CoordinatorEntity, BinarySensorEntity):
             return
 
         if (
-            self._alarm_matches(current_alarm)
+            (
+                self._alarm_matches(current_alarm)
+                or data.get("unlock_category") == self._attr_translation_key
+            )
             and current_alarm_time is not None
             and current_alarm_time != self._prev_alarm_time
         ):

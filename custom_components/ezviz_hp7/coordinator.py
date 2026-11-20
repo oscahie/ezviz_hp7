@@ -13,6 +13,28 @@ from homeassistant.helpers.update_coordinator import (
 
 from .const import UPDATE_INTERVAL_SEC
 
+# alarmType of a door-lock unlock record in the EZVIZ alarm list.
+ALARM_TYPE_UNLOCK_LOCK = 10242
+
+
+def unlock_category_from_detail(
+    detail: dict[str, Any] | None, biometric_names: dict[str, list[str]] | None
+) -> str | None:
+    """Unlock category ("unlock_face", "unlock_palm", ...) from an alarm record.
+
+    The HP7 Pro puts the enrolment name in ``customerType`` for face and palm
+    unlocks ("Oscar unlock the lock"), so the alarm-name strings never say
+    "face" or "palm". Match the name against the device's FaceInfo/VeinInfo
+    lists; it is only trusted when exactly one list contains it.
+    """
+    if not isinstance(detail, dict) or detail.get("alarmType") != ALARM_TYPE_UNLOCK_LOCK:
+        return None
+    who = detail.get("customerType")
+    if not isinstance(who, str) or not who or not biometric_names:
+        return None
+    hits = [cat for cat, names in biometric_names.items() if who in names]
+    return hits[0] if len(hits) == 1 else None
+
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
@@ -87,6 +109,7 @@ class Hp7Coordinator(DataUpdateCoordinator):
         # new enrolments / renames within a polling cycle or two.
         self._key_list: list[dict[str, Any]] | None = None
         self._key_list_age: int = 10**6  # force first fetch
+        self._biometric_names: dict[str, list[str]] | None = None
         # Relay handle, set by the camera platform once it exists. Used to
         # back polling off while someone is watching the LAN stream (#44).
         self.live_relay: Any = None
@@ -190,8 +213,19 @@ class Hp7Coordinator(DataUpdateCoordinator):
             )
             if keys is not None:
                 self._key_list = keys
+            bio = await self.hass.async_add_executor_job(
+                self.api.get_biometric_key_names, self.serial
+            )
+            if bio is not None:
+                self._biometric_names = bio
             self._key_list_age = 0
         if self._key_list is not None:
             data["keys"] = self._key_list
+
+        category = unlock_category_from_detail(
+            self._last_alarm_detail, self._biometric_names
+        )
+        if category is not None:
+            data["unlock_category"] = category
 
         return data
