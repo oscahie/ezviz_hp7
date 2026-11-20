@@ -583,6 +583,23 @@ def _sender_thread(
             pass
 
 
+def _psm_video_stream_type(data: bytes) -> Optional[int]:
+    """Video stream_type from the first MPEG-PS program stream map, if any."""
+    i = data.find(b"\x00\x00\x01\xbc")
+    while 0 <= i:
+        end = i + 6 + int.from_bytes(data[i + 4:i + 6], "big")
+        if end <= len(data) and data[i + 7] == 0xFF:
+            j = i + 10 + int.from_bytes(data[i + 8:i + 10], "big")
+            j += 2  # elementary_stream_map_length
+            while j + 4 <= end - 4:
+                stream_type, stream_id = data[j], data[j + 1]
+                if 0xE0 <= stream_id <= 0xEF:
+                    return stream_type
+                j += 4 + int.from_bytes(data[j + 2:j + 4], "big")
+        i = data.find(b"\x00\x00\x01\xbc", i + 4)
+    return None
+
+
 class Hp7StreamRelay:
     """Per-entry TCP server. Each accept opens a VTM session and forwards
     muxed MPEG-TS (H.264 + AAC) to the connected client (HA Stream component)."""
@@ -668,6 +685,10 @@ class Hp7StreamRelay:
         # a packet capture.
         self._diagnostic_dumps = bool(diagnostic_dumps)
         self._configured_key = (encryption_key or "").strip()
+        # The decoder syncs encrypted streams on a keyframe (PSM), so ffmpeg
+        # gets the codec parameters right away. A long probe there only
+        # buffers video, and a slow host never catches up on that delay.
+        self._probe_duration_us = "1000000" if self._configured_key else "10000000"
         self._es_dump_buf = bytearray()
         self._es_dump_done = False
         # Raw MPEG-PS dump + keyframe-marker counter (#41): the HPD5 "synced"
@@ -698,6 +719,13 @@ class Hp7StreamRelay:
         self._decrypt_key: Optional[str] = None
         self._decrypt_buf = bytearray()
         self._decrypt_failed = False
+        # HP7 Pro: only IRAP + parameter-set NALs (and the AAC audio) are
+        # encrypted; P slices come in the clear. None until enough slices
+        # have been seen to tell (see _maybe_decrypt).
+        self._irap_only_crypt: Optional[bool] = None
+        # 2 = HEVC (NAL header kept clear), 0 = H.264 (NAL header encrypted).
+        self._nalu_header_size = 2
+        self._slice_evidence = [0, 0]
         # GOP cache (#37): the stream since the last keyframe. A new viewer
         # can only start painting from an IDR, and some doorbells emit
         # keyframes tens of seconds apart — replaying this to each new
@@ -979,17 +1007,76 @@ class Hp7StreamRelay:
             return body
         try:
             from .pylocalapi.stream import (
+                HEVC_IRAP_AND_PARAM_SET_NAL_TYPES,
                 decrypt_hikvision_ps_video,
+                hevc_ps_non_irap_slices_look_clear,
                 mpeg_ps_decryptable_prefix_length,
             )
 
             self._decrypt_buf.extend(body)
+            if not self._decrypt_buf.startswith(b"\x00\x00\x01"):
+                # Decryption is switched on mid-stream, so the first chunk
+                # usually starts inside a packet and nothing would ever parse.
+                # Skip ahead to the next pack header.
+                j = self._decrypt_buf.find(b"\x00\x00\x01\xba")
+                if j < 0:
+                    del self._decrypt_buf[:-3]
+                    return b""
+                del self._decrypt_buf[:j]
             n = mpeg_ps_decryptable_prefix_length(bytes(self._decrypt_buf))
+            if n <= 0 and len(self._decrypt_buf) > 1024 * 1024:
+                # Far more than any keyframe, so the parser is stuck on a
+                # damaged packet. Drop to the next pack header that parses.
+                _LOGGER.warning(
+                    "Hp7StreamRelay: decrypt buffer stuck at %d B, resyncing "
+                    "(serial=%s)", len(self._decrypt_buf), self._serial,
+                )
+                while n <= 0:
+                    j = self._decrypt_buf.find(b"\x00\x00\x01\xba", 1)
+                    if j < 0:
+                        del self._decrypt_buf[:-3]
+                        return b""
+                    del self._decrypt_buf[:j]
+                    n = mpeg_ps_decryptable_prefix_length(bytes(self._decrypt_buf))
             if n <= 0:
                 return b""
             chunk = bytes(self._decrypt_buf[:n])
             del self._decrypt_buf[:n]
-            return decrypt_hikvision_ps_video(chunk, self._decrypt_key)
+            # The video codec can change (the sub stream switches between HEVC
+            # and H.264 with the device's video settings), and an encrypted
+            # H.264 stream also encrypts the NAL header. Follow the PSM.
+            codec = _psm_video_stream_type(chunk)
+            if codec is not None:
+                size = 0 if codec == 0x1B else 2
+                if size != self._nalu_header_size:
+                    _LOGGER.info(
+                        "Hp7StreamRelay: decrypting %s video (serial=%s)",
+                        "H.264" if size == 0 else "HEVC", self._serial,
+                    )
+                    self._nalu_header_size = size
+            if self._irap_only_crypt is None:
+                clear, total = hevc_ps_non_irap_slices_look_clear(chunk)
+                self._slice_evidence[0] += clear
+                self._slice_evidence[1] += total
+                seen_clear, seen = self._slice_evidence
+                if seen >= 12:
+                    # Ciphertext starts with the "first slice, PPS 0" bits
+                    # only ~25% of the time; clear HP7 Pro P slices ~100%.
+                    self._irap_only_crypt = seen_clear >= 0.9 * seen
+                    _LOGGER.info(
+                        "Hp7StreamRelay: %s encryption detected (%d/%d P slices "
+                        "in the clear, serial=%s)",
+                        "IRAP-only" if self._irap_only_crypt else "full",
+                        seen_clear, seen, self._serial,
+                    )
+            return decrypt_hikvision_ps_video(
+                chunk,
+                self._decrypt_key,
+                nalu_header_size=self._nalu_header_size,
+                encrypted_nal_types=(
+                    HEVC_IRAP_AND_PARAM_SET_NAL_TYPES if self._irap_only_crypt else None
+                ),
+            )
         except Exception as exc:  # noqa: BLE001
             self._decrypt_failed = True
             _LOGGER.error(
@@ -1422,6 +1509,9 @@ class Hp7StreamRelay:
         self._q_last_drain = {}
         self._q_resync = set()
         self._decrypt_buf = bytearray()
+        self._irap_only_crypt = None
+        self._nalu_header_size = 2
+        self._slice_evidence = [0, 0]
         self._warned_saturation = False
         self._warned_scrambled = False
         self._decrypt_buf = bytearray()
@@ -1456,6 +1546,10 @@ class Hp7StreamRelay:
                     self._fanout(self._sub_raw_qs, body, video=True)
                     for stream_id, payload in parser.feed(body):
                         if stream_id == AUDIO_STREAM_ID and payload:
+                            if self._irap_only_crypt and self._decrypt_key:
+                                # HP7 Pro encrypts the AAC frame bodies too.
+                                from .pylocalapi.stream import decrypt_adts_aac
+                                payload = decrypt_adts_aac(payload, self._decrypt_key)
                             a_bytes += len(payload)
                             self._fanout(self._sub_a_qs, payload)
                         elif stream_id == VIDEO_STREAM_ID and payload:
@@ -1746,7 +1840,7 @@ class Hp7StreamRelay:
                     # #39 HPD7). A large analyzeduration/probesize is a ceiling,
                     # not a fixed wait — it starts as soon as params are known.
                     "-fflags", "+genpts", "-flags", "low_delay",
-                    "-analyzeduration", "10000000", "-probesize", "10000000",
+                    "-analyzeduration", self._probe_duration_us, "-probesize", "10000000",
                     # NO wall-clock re-timestamping on this input. It is a
                     # real MPEG-PS container that already carries correct
                     # timestamps; stamping by arrival instead collapses the
@@ -2077,6 +2171,7 @@ class Hp7LiveCamera(Camera):
             request,
             ffmpeg_path=self._ffmpeg_path,
             upstream_url=self._relay.stream_url,
+            analyzeduration=self._relay._probe_duration_us,
         )
 
     async def async_camera_image(

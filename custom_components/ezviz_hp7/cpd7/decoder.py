@@ -32,6 +32,7 @@ _LOGGER = logging.getLogger(__name__)
 
 HMAC_TRAILER_SIZE = 32
 MPEG_PS_PACK = b"\x00\x00\x01\xba"
+MPEG_PS_PSM = b"\x00\x00\x01\xbc"
 
 # HEVC VPS NAL start code with NAL header byte 0x40 (NAL type 32 = VPS) and
 # byte 0x01 (layer 0, temporal_id_plus1 = 1).  CP7 and newer HP7 firmware
@@ -223,6 +224,19 @@ class StreamDecoder:
             buf.find(H264_SPS_4B),
             buf.find(H264_SPS_3B),
         ]
+        # With Image/Video Encryption on, the parameter sets are AES
+        # encrypted and never match the markers above. The doorbell sends
+        # a program stream map (PSM) right before each keyframe, and
+        # ffmpeg needs it to know the video is HEVC, so sync on it too.
+        # The 4-byte start code also turns up inside encrypted payloads,
+        # so check the fixed PSM header bits (current_next_indicator set,
+        # reserved + marker byte 0xFF) before trusting a match.
+        i = buf.find(MPEG_PS_PSM)
+        while 0 <= i and i + 8 <= len(buf):
+            if buf[i + 6] & 0x80 and buf[i + 7] == 0xFF:
+                candidates.append(i)
+                break
+            i = buf.find(MPEG_PS_PSM, i + 4)
         candidates = [c for c in candidates if c >= 0]
         return min(candidates) if candidates else -1
 
