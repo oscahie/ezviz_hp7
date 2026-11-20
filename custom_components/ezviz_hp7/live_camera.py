@@ -685,6 +685,10 @@ class Hp7StreamRelay:
         # a packet capture.
         self._diagnostic_dumps = bool(diagnostic_dumps)
         self._configured_key = (encryption_key or "").strip()
+        # The decoder syncs encrypted streams on a keyframe (PSM), so ffmpeg
+        # gets the codec parameters right away. A long probe there only
+        # buffers video, and a slow host never catches up on that delay.
+        self._probe_duration_us = "1000000" if self._configured_key else "10000000"
         self._es_dump_buf = bytearray()
         self._es_dump_done = False
         # Raw MPEG-PS dump + keyframe-marker counter (#41): the HPD5 "synced"
@@ -1836,7 +1840,7 @@ class Hp7StreamRelay:
                     # #39 HPD7). A large analyzeduration/probesize is a ceiling,
                     # not a fixed wait — it starts as soon as params are known.
                     "-fflags", "+genpts", "-flags", "low_delay",
-                    "-analyzeduration", "10000000", "-probesize", "10000000",
+                    "-analyzeduration", self._probe_duration_us, "-probesize", "10000000",
                     # NO wall-clock re-timestamping on this input. It is a
                     # real MPEG-PS container that already carries correct
                     # timestamps; stamping by arrival instead collapses the
@@ -2167,6 +2171,7 @@ class Hp7LiveCamera(Camera):
             request,
             ffmpeg_path=self._ffmpeg_path,
             upstream_url=self._relay.stream_url,
+            analyzeduration=self._relay._probe_duration_us,
         )
 
     async def async_camera_image(
