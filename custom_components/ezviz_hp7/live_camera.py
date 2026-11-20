@@ -583,6 +583,23 @@ def _sender_thread(
             pass
 
 
+def _psm_video_stream_type(data: bytes) -> Optional[int]:
+    """Video stream_type from the first MPEG-PS program stream map, if any."""
+    i = data.find(b"\x00\x00\x01\xbc")
+    while 0 <= i:
+        end = i + 6 + int.from_bytes(data[i + 4:i + 6], "big")
+        if end <= len(data) and data[i + 7] == 0xFF:
+            j = i + 10 + int.from_bytes(data[i + 8:i + 10], "big")
+            j += 2  # elementary_stream_map_length
+            while j + 4 <= end - 4:
+                stream_type, stream_id = data[j], data[j + 1]
+                if 0xE0 <= stream_id <= 0xEF:
+                    return stream_type
+                j += 4 + int.from_bytes(data[j + 2:j + 4], "big")
+        i = data.find(b"\x00\x00\x01\xbc", i + 4)
+    return None
+
+
 class Hp7StreamRelay:
     """Per-entry TCP server. Each accept opens a VTM session and forwards
     muxed MPEG-TS (H.264 + AAC) to the connected client (HA Stream component)."""
@@ -702,6 +719,8 @@ class Hp7StreamRelay:
         # encrypted; P slices come in the clear. None until enough slices
         # have been seen to tell (see _maybe_decrypt).
         self._irap_only_crypt: Optional[bool] = None
+        # 2 = HEVC (NAL header kept clear), 0 = H.264 (NAL header encrypted).
+        self._nalu_header_size = 2
         self._slice_evidence = [0, 0]
         # GOP cache (#37): the stream since the last keyframe. A new viewer
         # can only start painting from an IDR, and some doorbells emit
@@ -1019,6 +1038,18 @@ class Hp7StreamRelay:
                 return b""
             chunk = bytes(self._decrypt_buf[:n])
             del self._decrypt_buf[:n]
+            # The video codec can change (the sub stream switches between HEVC
+            # and H.264 with the device's video settings), and an encrypted
+            # H.264 stream also encrypts the NAL header. Follow the PSM.
+            codec = _psm_video_stream_type(chunk)
+            if codec is not None:
+                size = 0 if codec == 0x1B else 2
+                if size != self._nalu_header_size:
+                    _LOGGER.info(
+                        "Hp7StreamRelay: decrypting %s video (serial=%s)",
+                        "H.264" if size == 0 else "HEVC", self._serial,
+                    )
+                    self._nalu_header_size = size
             if self._irap_only_crypt is None:
                 clear, total = hevc_ps_non_irap_slices_look_clear(chunk)
                 self._slice_evidence[0] += clear
@@ -1037,6 +1068,7 @@ class Hp7StreamRelay:
             return decrypt_hikvision_ps_video(
                 chunk,
                 self._decrypt_key,
+                nalu_header_size=self._nalu_header_size,
                 encrypted_nal_types=(
                     HEVC_IRAP_AND_PARAM_SET_NAL_TYPES if self._irap_only_crypt else None
                 ),
@@ -1474,6 +1506,7 @@ class Hp7StreamRelay:
         self._q_resync = set()
         self._decrypt_buf = bytearray()
         self._irap_only_crypt = None
+        self._nalu_header_size = 2
         self._slice_evidence = [0, 0]
         self._warned_saturation = False
         self._warned_scrambled = False
