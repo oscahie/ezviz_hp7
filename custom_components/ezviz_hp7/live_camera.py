@@ -698,6 +698,11 @@ class Hp7StreamRelay:
         self._decrypt_key: Optional[str] = None
         self._decrypt_buf = bytearray()
         self._decrypt_failed = False
+        # HP7 Pro: only IRAP + parameter-set NALs (and the AAC audio) are
+        # encrypted; P slices come in the clear. None until enough slices
+        # have been seen to tell (see _maybe_decrypt).
+        self._irap_only_crypt: Optional[bool] = None
+        self._slice_evidence = [0, 0]
         # GOP cache (#37): the stream since the last keyframe. A new viewer
         # can only start painting from an IDR, and some doorbells emit
         # keyframes tens of seconds apart — replaying this to each new
@@ -979,7 +984,9 @@ class Hp7StreamRelay:
             return body
         try:
             from .pylocalapi.stream import (
+                HEVC_IRAP_AND_PARAM_SET_NAL_TYPES,
                 decrypt_hikvision_ps_video,
+                hevc_ps_non_irap_slices_look_clear,
                 mpeg_ps_decryptable_prefix_length,
             )
 
@@ -989,7 +996,28 @@ class Hp7StreamRelay:
                 return b""
             chunk = bytes(self._decrypt_buf[:n])
             del self._decrypt_buf[:n]
-            return decrypt_hikvision_ps_video(chunk, self._decrypt_key)
+            if self._irap_only_crypt is None:
+                clear, total = hevc_ps_non_irap_slices_look_clear(chunk)
+                self._slice_evidence[0] += clear
+                self._slice_evidence[1] += total
+                seen_clear, seen = self._slice_evidence
+                if seen >= 12:
+                    # Ciphertext starts with the "first slice, PPS 0" bits
+                    # only ~25% of the time; clear HP7 Pro P slices ~100%.
+                    self._irap_only_crypt = seen_clear >= 0.9 * seen
+                    _LOGGER.info(
+                        "Hp7StreamRelay: %s encryption detected (%d/%d P slices "
+                        "in the clear, serial=%s)",
+                        "IRAP-only" if self._irap_only_crypt else "full",
+                        seen_clear, seen, self._serial,
+                    )
+            return decrypt_hikvision_ps_video(
+                chunk,
+                self._decrypt_key,
+                encrypted_nal_types=(
+                    HEVC_IRAP_AND_PARAM_SET_NAL_TYPES if self._irap_only_crypt else None
+                ),
+            )
         except Exception as exc:  # noqa: BLE001
             self._decrypt_failed = True
             _LOGGER.error(
@@ -1422,6 +1450,8 @@ class Hp7StreamRelay:
         self._q_last_drain = {}
         self._q_resync = set()
         self._decrypt_buf = bytearray()
+        self._irap_only_crypt = None
+        self._slice_evidence = [0, 0]
         self._warned_saturation = False
         self._warned_scrambled = False
         self._decrypt_buf = bytearray()
@@ -1456,6 +1486,10 @@ class Hp7StreamRelay:
                     self._fanout(self._sub_raw_qs, body, video=True)
                     for stream_id, payload in parser.feed(body):
                         if stream_id == AUDIO_STREAM_ID and payload:
+                            if self._irap_only_crypt and self._decrypt_key:
+                                # HP7 Pro encrypts the AAC frame bodies too.
+                                from .pylocalapi.stream import decrypt_adts_aac
+                                payload = decrypt_adts_aac(payload, self._decrypt_key)
                             a_bytes += len(payload)
                             self._fanout(self._sub_a_qs, payload)
                         elif stream_id == VIDEO_STREAM_ID and payload:

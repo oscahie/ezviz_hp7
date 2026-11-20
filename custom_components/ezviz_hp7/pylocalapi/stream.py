@@ -1263,13 +1263,68 @@ def _find_h264_nal_start_codes(
     ]
 
 
+# HEVC VPS/SPS/PPS (32-34) and IRAP slices (16-21): the only NALs the HP7 Pro
+# (CS-HPD7-R400, fw V5.4.0) encrypts when Image Encryption is on.
+HEVC_IRAP_AND_PARAM_SET_NAL_TYPES = frozenset({16, 17, 18, 19, 20, 21, 32, 33, 34})
+
+
+def hevc_ps_non_irap_slices_look_clear(data: bytes) -> tuple[int, int]:
+    """Count (clear-looking, total) HEVC non-IRAP slices in an MPEG-PS chunk.
+
+    A clear slice whose first_slice_segment_in_pic_flag is 1 and whose PPS id
+    is 0 starts with bits ``11``; the HP7 Pro sends one slice per picture, so
+    in the clear nearly every P slice starts that way, while ciphertext does
+    only a quarter of the time. Used to tell "IRAP-only" encryption apart from
+    "every NAL" encryption.
+    """
+    clear = total = 0
+    for start_code_pos, start_code_len in _find_hevc_nal_start_codes(data, 0, len(data)):
+        nal_type = _hevc_nal_type(data, start_code_pos, start_code_len)
+        if nal_type is None or nal_type > 9:
+            continue
+        first = start_code_pos + start_code_len + 2
+        if first >= len(data):
+            continue
+        total += 1
+        if data[first] >> 6 == 0b11:
+            clear += 1
+    return clear, total
+
+
+def decrypt_adts_aac(payload: bytes, key: str | bytes) -> bytes:
+    """Decrypt AAC ADTS frames whose bodies are AES-ECB encrypted (HP7 Pro).
+
+    The 7-byte ADTS header stays clear; every whole 16-byte block of the
+    frame body after it is encrypted. Bytes that do not parse as complete
+    ADTS frames are returned unchanged.
+    """
+    key_bytes = key.encode() if isinstance(key, str) else key
+    cipher = _hikvision_aes_ecb_cipher(key_bytes.ljust(16, b"\0")[:16])
+    out = bytearray(payload)
+    i = 0
+    while i + 7 <= len(out) and out[i] == 0xFF and (out[i + 1] & 0xF0) == 0xF0:
+        size = ((out[i + 3] & 3) << 11) | (out[i + 4] << 3) | (out[i + 5] >> 5)
+        if size < 7 or i + size > len(out):
+            break
+        n = (size - 7) // AES.block_size * AES.block_size
+        out[i + 7:i + 7 + n] = cipher.decrypt(bytes(out[i + 7:i + 7 + n]))
+        i += size
+    return bytes(out)
+
+
 def decrypt_hikvision_ps_video(  # noqa: PLR0912, PLR0915
     data: bytes,
     key: str | bytes,
     *,
     nalu_header_size: int | None = 2,
+    encrypted_nal_types: frozenset[int] | None = None,
 ) -> bytes:
     """Decrypt Hikvision/EZVIZ encrypted MPEG-PS video NAL payloads.
+
+    ``encrypted_nal_types`` limits decryption to those NAL types (Annex B
+    framing with a 1- or 2-byte header); other NALs are left as they are.
+    The HP7 Pro encrypts only HEVC parameter sets and IRAP slices and sends
+    P slices in the clear (see ``HEVC_IRAP_AND_PARAM_SET_NAL_TYPES``).
 
     EZVIZ battery-camera VTM streams keep MPEG-PS/PES and Annex B NAL framing
     clear, but encrypt the video NAL body after the codec NAL header. The mobile
@@ -1416,6 +1471,15 @@ def decrypt_hikvision_ps_video(  # noqa: PLR0912, PLR0915
                 if active_nal and segment_start < start_code_pos:
                     decrypt_nal_body_segment(segment_start, start_code_pos)
                 reset_nal_state()
+                if encrypted_nal_types is not None:
+                    nal_type = (
+                        _h264_nal_type(data, start_code_pos, start_code_len)
+                        if nalu_header_size == 1
+                        else _hevc_nal_type(data, start_code_pos, start_code_len)
+                    )
+                    if nal_type not in encrypted_nal_types:
+                        segment_start = decrypt_end
+                        continue
                 active_nal = True
                 decrypt_start = start_code_pos + start_code_len + nalu_header_size
                 active_nal_body_start = decrypt_start
