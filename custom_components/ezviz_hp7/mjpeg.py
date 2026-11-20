@@ -42,6 +42,7 @@ def _build_ffmpeg_cmd(
     width: int,
     height: int,
     quality: int,
+    analyzeduration: str = "10000000",
 ) -> list[str]:
     """ffmpeg that reads the relay's MPEG-TS, drops audio, decodes the
     video (H.264 or HEVC) and emits multipart MJPEG to stdout.
@@ -63,7 +64,7 @@ def _build_ffmpeg_cmd(
     return [
         ffmpeg_path,
         "-loglevel", "warning",
-        "-analyzeduration", "10000000",
+        "-analyzeduration", analyzeduration,
         "-probesize", "10000000",
         "-f", "mpegts",
         "-fflags", "+discardcorrupt",
@@ -87,6 +88,7 @@ async def serve_mjpeg(
     width: int = 1280,
     height: int = 720,
     quality: int = 5,
+    analyzeduration: str = "10000000",
 ) -> web.StreamResponse:
     """Stream a continuous MJPEG response back to the HTTP client.
 
@@ -96,6 +98,7 @@ async def serve_mjpeg(
     cmd = _build_ffmpeg_cmd(
         ffmpeg_path, upstream_url,
         fps=fps, width=width, height=height, quality=quality,
+        analyzeduration=analyzeduration,
     )
     started_at = time.monotonic()
     peer = request.remote
