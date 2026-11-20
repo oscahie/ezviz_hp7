@@ -984,7 +984,30 @@ class Hp7StreamRelay:
             )
 
             self._decrypt_buf.extend(body)
+            if not self._decrypt_buf.startswith(b"\x00\x00\x01"):
+                # Decryption is switched on mid-stream, so the first chunk
+                # usually starts inside a packet and nothing would ever parse.
+                # Skip ahead to the next pack header.
+                j = self._decrypt_buf.find(b"\x00\x00\x01\xba")
+                if j < 0:
+                    del self._decrypt_buf[:-3]
+                    return b""
+                del self._decrypt_buf[:j]
             n = mpeg_ps_decryptable_prefix_length(bytes(self._decrypt_buf))
+            if n <= 0 and len(self._decrypt_buf) > 1024 * 1024:
+                # Far more than any keyframe, so the parser is stuck on a
+                # damaged packet. Drop to the next pack header that parses.
+                _LOGGER.warning(
+                    "Hp7StreamRelay: decrypt buffer stuck at %d B, resyncing "
+                    "(serial=%s)", len(self._decrypt_buf), self._serial,
+                )
+                while n <= 0:
+                    j = self._decrypt_buf.find(b"\x00\x00\x01\xba", 1)
+                    if j < 0:
+                        del self._decrypt_buf[:-3]
+                        return b""
+                    del self._decrypt_buf[:j]
+                    n = mpeg_ps_decryptable_prefix_length(bytes(self._decrypt_buf))
             if n <= 0:
                 return b""
             chunk = bytes(self._decrypt_buf[:n])
