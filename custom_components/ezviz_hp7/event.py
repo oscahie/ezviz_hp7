@@ -7,7 +7,6 @@ from typing import Any, TYPE_CHECKING
 from homeassistant.components.event import EventEntity
 from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 
@@ -25,6 +24,16 @@ EVENT_TYPE_BY_CATEGORY = {
     "unlock_app": "app",
 }
 EVENT_TYPES = [*EVENT_TYPE_BY_CATEGORY.values(), "monitor", "other"]
+# Logbook wording per event type.
+EVENT_LOG_LABELS = {
+    "face": "Face",
+    "palm": "Palm",
+    "card": "Card",
+    "code": "Code",
+    "app": "EZVIZ app",
+    "monitor": "Monitor",
+    "other": "Unlock",
+}
 
 
 async def async_setup_entry(hass, entry, async_add_entities) -> None:
@@ -83,22 +92,31 @@ class Hp7UnlockEvent(CoordinatorEntity, EventEntity):
         if unlock_time is None or unlock_time == self._prev_unlock_time:
             return
         self._prev_unlock_time = unlock_time
-        when = (
-            dt_util.as_local(dt_util.utc_from_timestamp(unlock_time / 1000)).isoformat()
-            if isinstance(unlock_time, (int, float))
-            else None
-        )
+        # alarmStartTimeStr is local time; the HP7 Pro's epoch alarmStartTime
+        # runs an hour ahead of it, so the string is the one to show.
+        when = (unlock.get("record") or {}).get("alarmStartTimeStr")
         event_type = unlock_event_type(unlock)
+        user = unlock.get("user")
         self._trigger_event(
             event_type,
-            {
-                "user": unlock.get("user"),
-                "message": unlock.get("message"),
-                "unlock_time": when,
-            },
+            {"user": user, "message": unlock.get("message"), "unlock_time": when},
         )
-        _LOGGER.debug("Unlock event %s (%s) at %s", event_type, unlock.get("user"), when)
+        _LOGGER.debug("Unlock event %s (%s) at %s", event_type, user, when)
         self.async_write_ha_state()
+        # Event entities only show the type in the UI; a logbook line makes
+        # the who/how/when history readable in the Logbook.
+        if "logbook" in self.hass.config.components:
+            from homeassistant.components.logbook import async_log_entry
+
+            method = EVENT_LOG_LABELS.get(event_type, event_type)
+            state = self.hass.states.get(self.entity_id)
+            async_log_entry(
+                self.hass,
+                state.name if state else "Unlock",
+                f"{method} · {user}" if user else method,
+                DOMAIN,
+                self.entity_id,
+            )
 
     @property
     def device_info(self):
