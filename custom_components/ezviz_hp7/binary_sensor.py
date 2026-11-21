@@ -354,6 +354,7 @@ class Hp7BinaryAlarm(CoordinatorEntity, BinarySensorEntity):
         # pre-existing alarm doesn't fire as if it just happened (#45).
         self._primed = False
         self._prev_unlock_time: Any = None
+        self._last_user: str | None = None
         self._off_unsub: CALLBACK_TYPE | None = None
 
     @property
@@ -363,6 +364,13 @@ class Hp7BinaryAlarm(CoordinatorEntity, BinarySensorEntity):
             return False
         delta = (dt_util.utcnow() - self._last_trigger).total_seconds()
         return delta < PULSE_SECONDS
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Face/palm enrolment name of the last unlock this sensor fired on."""
+        if self._attr_translation_key not in _UNLOCK_KEYS:
+            return None
+        return {"last_user": self._last_user}
 
     def _schedule_state_update(self) -> None:
         """Schedule state update to turn off after PULSE_SECONDS."""
@@ -437,6 +445,7 @@ class Hp7BinaryAlarm(CoordinatorEntity, BinarySensorEntity):
                     or (category is None and self._alarm_matches(unlock.get("message")))
                 )
                 if triggered:
+                    self._last_user = unlock.get("user")
                     current_alarm = unlock.get("message")
                     current_alarm_time = unlock.get("time")
                     detail = unlock.get("record")
@@ -500,6 +509,8 @@ class Hp7BinaryAlarm(CoordinatorEntity, BinarySensorEntity):
                     payload["details"] = detail
                 if card_id is not None:
                     payload["card_id"] = card_id
+                if self._last_user is not None:
+                    payload["user"] = self._last_user
                 if isinstance(keys, list) and keys:
                     payload["keys"] = keys
                     # Heuristic: if card_id is known and matches a keyID
