@@ -2023,6 +2023,12 @@ class Hp7StreamRelay:
                         else FIRST_OUTPUT_TIMEOUT,
                         self._serial, got_output,
                     )
+                    # The shared feed itself is broken (e.g. the decryptor
+                    # never resyncs after the device toggles encryption).
+                    # Thumbnail grabs keep re-arming the idle timer, so it
+                    # would never be torn down on its own: drop it so the
+                    # next client opens a fresh device session.
+                    asyncio.create_task(self._shutdown_shared())
                     break
                 if not data:
                     break
