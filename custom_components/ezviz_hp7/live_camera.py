@@ -1933,7 +1933,20 @@ class Hp7StreamRelay:
                 got_output = True
                 try:
                     writer.write(data)
-                    await writer.drain()
+                    # A downstream client (go2rtc/HA stream) that stays
+                    # connected but stops reading would park us here forever:
+                    # _active_clients never drops, the idle teardown never
+                    # arms and the LAN session keeps running with no viewer.
+                    await asyncio.wait_for(
+                        writer.drain(), timeout=OUTPUT_STALL_TIMEOUT
+                    )
+                except asyncio.TimeoutError:
+                    _LOGGER.warning(
+                        "Hp7StreamRelay: client %s stopped reading for %.0fs "
+                        "— closing it (serial=%s)",
+                        peer, OUTPUT_STALL_TIMEOUT, self._serial,
+                    )
+                    break
                 except (ConnectionResetError, BrokenPipeError):
                     break
         except Exception as exc:
