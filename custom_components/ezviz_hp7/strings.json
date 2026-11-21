@@ -203,6 +203,34 @@
       "chime_pir_ringtone_monitor": {
         "name": "Monitor Motion Ringtone"
       }
+    },
+    "event": {
+      "unlock": {
+        "name": "Unlock",
+        "state_attributes": {
+          "event_type": {
+            "name": "Method",
+            "state": {
+              "face": "Face",
+              "palm": "Palm",
+              "card": "Card",
+              "code": "Code",
+              "app": "EZVIZ app",
+              "monitor": "Monitor",
+              "other": "Other"
+            }
+          },
+          "user": {
+            "name": "User"
+          },
+          "message": {
+            "name": "Message"
+          },
+          "unlock_time": {
+            "name": "Unlock time"
+          }
+        }
+      }
     }
   },
   "services": {

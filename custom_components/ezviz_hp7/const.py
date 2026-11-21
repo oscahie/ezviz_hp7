@@ -98,7 +98,7 @@ CONF_DIAGNOSTIC_DUMPS = "diagnostic_dumps"
 CONF_ENCRYPTION_KEY = "encryption_key"
 
 # Platforms to set up
-PLATFORMS = ["button", "sensor", "binary_sensor", "camera", "switch", "number"]
+PLATFORMS = ["button", "sensor", "binary_sensor", "camera", "switch", "number", "event"]
 
 # Poll interval in seconds. 2 s was aggressive enough to trigger HTTP 500 from
 # the EZVIZ pagelist endpoint under load (see issue #25); 15 s matches Pedro's
