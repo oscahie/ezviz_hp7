@@ -353,6 +353,8 @@ class Hp7BinaryAlarm(CoordinatorEntity, BinarySensorEntity):
         # False until the first coordinator update has been absorbed, so a
         # pre-existing alarm doesn't fire as if it just happened (#45).
         self._primed = False
+        self._prev_unlock_time: Any = None
+        self._last_user: str | None = None
         self._off_unsub: CALLBACK_TYPE | None = None
 
     @property
@@ -362,6 +364,13 @@ class Hp7BinaryAlarm(CoordinatorEntity, BinarySensorEntity):
             return False
         delta = (dt_util.utcnow() - self._last_trigger).total_seconds()
         return delta < PULSE_SECONDS
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Face/palm enrolment name of the last unlock this sensor fired on."""
+        if self._attr_translation_key not in _UNLOCK_KEYS:
+            return None
+        return {"last_user": self._last_user}
 
     def _schedule_state_update(self) -> None:
         """Schedule state update to turn off after PULSE_SECONDS."""
@@ -408,9 +417,12 @@ class Hp7BinaryAlarm(CoordinatorEntity, BinarySensorEntity):
         # None that looked like a brand-new event, so every HA restart or
         # integration reload replayed the last unlock — pulsing the sensor and
         # firing ezviz_hp7_unlock for something that happened hours ago.
+        unlock = data.get("unlock") if isinstance(data.get("unlock"), dict) else None
+
         if self._primed is False:
             self._primed = True
             self._prev_alarm_time = current_alarm_time
+            self._prev_unlock_time = unlock.get("time") if unlock else None
             _LOGGER.debug(
                 "Alarm sensor %s primed at %s (no pulse)",
                 self._attr_translation_key, current_alarm_time,
@@ -418,12 +430,35 @@ class Hp7BinaryAlarm(CoordinatorEntity, BinarySensorEntity):
             self.async_write_ha_state()
             return
 
-        if (
-            self._alarm_matches(current_alarm)
-            and current_alarm_time is not None
-            and current_alarm_time != self._prev_alarm_time
-        ):
-            self._prev_alarm_time = current_alarm_time
+        detail = data.get("latest_alarm_detail")
+        if self._attr_translation_key in _UNLOCK_KEYS:
+            # Unlock sensors follow the newest lock-unlock record, not the
+            # newest alarm: a detection alarm seconds after the unlock would
+            # hide it, and face/palm records carry no method in their name.
+            triggered = False
+            if unlock and unlock.get("time") != self._prev_unlock_time:
+                self._prev_unlock_time = unlock.get("time")
+                category = unlock.get("category")
+                triggered = (
+                    self._attr_translation_key == "unlock_lock"
+                    or category == self._attr_translation_key
+                    or (category is None and self._alarm_matches(unlock.get("message")))
+                )
+                if triggered:
+                    self._last_user = unlock.get("user")
+                    current_alarm = unlock.get("message")
+                    current_alarm_time = unlock.get("time")
+                    detail = unlock.get("record")
+        else:
+            triggered = (
+                self._alarm_matches(current_alarm)
+                and current_alarm_time is not None
+                and current_alarm_time != self._prev_alarm_time
+            )
+            if triggered:
+                self._prev_alarm_time = current_alarm_time
+
+        if triggered:
             self._last_trigger = dt_util.utcnow()
             self._schedule_state_update()
             _LOGGER.debug(
@@ -462,7 +497,6 @@ class Hp7BinaryAlarm(CoordinatorEntity, BinarySensorEntity):
             # Fire HA event for unlock categories so automations can branch
             # on the kind of unlock without polling state.
             if self._attr_translation_key in _UNLOCK_KEYS and self.hass is not None:
-                detail = data.get("latest_alarm_detail") if isinstance(data, dict) else None
                 keys = data.get("keys") if isinstance(data, dict) else None
                 card_id = _extract_card_id(detail) if detail else None
                 payload: dict[str, Any] = {
@@ -475,6 +509,8 @@ class Hp7BinaryAlarm(CoordinatorEntity, BinarySensorEntity):
                     payload["details"] = detail
                 if card_id is not None:
                     payload["card_id"] = card_id
+                if self._last_user is not None:
+                    payload["user"] = self._last_user
                 if isinstance(keys, list) and keys:
                     payload["keys"] = keys
                     # Heuristic: if card_id is known and matches a keyID

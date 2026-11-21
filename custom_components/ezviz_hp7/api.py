@@ -716,6 +716,64 @@ class Hp7Api:
             return None
         return [k for k in keys if isinstance(k, dict)]
 
+    def get_biometric_key_names(self, serial: str) -> dict[str, list[str]] | None:
+        """Names of the face and palm-vein enrolments on the device (HP7 Pro).
+
+        On the HP7 Pro a face or palm unlock is reported as
+        ``customerType = <enrolment name>`` (e.g. "Oscar" or
+        "Right Palm Vein Oscar"), not as a method string, so the method can
+        only be told by matching that name against these lists:
+            GET .../global/0/KeyMgr/FaceInfo -> {"data": {"faceInfo": [{"name": ...}]}}
+            GET .../global/0/KeyMgr/VeinInfo -> {"data": {"veinInfo": [{"name": ...}]}}
+        Returns None when the device has neither (older HP7).
+        """
+        self.ensure_client()
+        if not self._client:
+            return None
+        names: dict[str, list[str]] = {}
+        for category, item, list_key in (
+            ("unlock_face", "FaceInfo", "faceInfo"),
+            ("unlock_palm", "VeinInfo", "veinInfo"),
+        ):
+            url = (
+                f"https://{self._url}/v3/iot-feature/feature/{serial}"
+                f"/global/0/KeyMgr/{item}"
+            )
+            try:
+                resp = self._client._session.get(url, timeout=15)
+                resp.raise_for_status()
+                rows = ((resp.json() or {}).get("data") or {}).get(list_key)
+            except (RequestException, ValueError, AttributeError) as exc:
+                _LOGGER.debug("EZVIZ HP7: KeyMgr/%s failed: %s", item, exc)
+                continue
+            if isinstance(rows, list):
+                names[category] = [
+                    r["name"] for r in rows
+                    if isinstance(r, dict) and isinstance(r.get("name"), str)
+                ]
+        return names or None
+
+    def get_recent_alarms(self, serial: str, limit: int = 5) -> list[dict[str, Any]] | None:
+        """The ``limit`` newest alarm records for ``serial``, newest first.
+
+        An unlock is often followed (or preceded) within seconds by an
+        "Intelligent Detection Alarm" of the same person, so the newest record
+        alone loses unlocks between two polls.
+        """
+        self.ensure_client()
+        if not self._client:
+            return None
+        try:
+            payload = self._client.get_alarminfo(serial, limit=limit)
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.debug("EZVIZ HP7: get_alarminfo failed: %s", exc)
+            return None
+        for key in ("alarms", "alarmLogs", "alarmList", "alarmInfos"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                return [a for a in value if isinstance(a, dict)]
+        return None
+
     def get_latest_alarm_detail(self, serial: str) -> dict[str, Any] | None:
         """Fetch the most recent detailed alarm record for ``serial``.
 

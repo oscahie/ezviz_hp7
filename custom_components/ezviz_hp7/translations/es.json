@@ -203,6 +203,46 @@
       "chime_pir_ringtone_monitor": {
         "name": "Tono Movimiento Monitor"
       }
+    },
+    "event": {
+      "unlock": {
+        "name": "Apertura",
+        "state_attributes": {
+          "event_type": {
+            "name": "Evento",
+            "state": {
+              "face": "Cara",
+              "palm": "Palma",
+              "card": "Tarjeta",
+              "code": "Código",
+              "app": "App EZVIZ",
+              "monitor": "Monitor",
+              "other": "Otro"
+            }
+          },
+          "user": {
+            "name": "Usuario"
+          },
+          "message": {
+            "name": "Mensaje"
+          },
+          "unlock_time": {
+            "name": "Hora de apertura"
+          },
+          "method": {
+            "name": "Método",
+            "state": {
+              "face": "Cara",
+              "palm": "Palma",
+              "card": "Tarjeta",
+              "code": "Código",
+              "app": "App EZVIZ",
+              "monitor": "Monitor",
+              "other": "Otro"
+            }
+          }
+        }
+      }
     }
   },
   "services": {
