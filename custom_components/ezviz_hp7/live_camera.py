@@ -1295,6 +1295,9 @@ class Hp7StreamRelay:
         if (
             codec == "hevc"
             and self._stream_mode == "webrtc"
+            # hevc transcodes to H.264 in the relay; hevc_copy is an explicit
+            # choice for HEVC-capable WebRTC clients (Safari, Chrome).
+            and self._video_codec not in ("hevc", "hevc_copy")
             and not self._warned_hevc_webrtc
         ):
             self._warned_hevc_webrtc = True
@@ -2538,7 +2541,7 @@ async def async_setup_live_entities(
 
     # Only WebRTC can hit the HEVC-can't-play situation; clear stale repairs
     # for every other resolved mode.
-    if effective_mode != "webrtc":
+    if effective_mode != "webrtc" or video_codec in ("hevc", "hevc_copy"):
         try:
             from homeassistant.helpers import issue_registry as ir
 
