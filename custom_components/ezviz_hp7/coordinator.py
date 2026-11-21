@@ -242,12 +242,24 @@ class Hp7Coordinator(DataUpdateCoordinator):
             data["keys"] = self._key_list
 
         if self._last_unlock is not None:
+            category = unlock_category_from_detail(
+                self._last_unlock, self._biometric_names
+            )
             data["unlock"] = {
                 "time": self._last_unlock.get("alarmStartTime"),
-                "category": unlock_category_from_detail(
-                    self._last_unlock, self._biometric_names
+                "category": category,
+                # Face/palm records name the enrolment ("Oscar",
+                # "Right Palm Vein Oscar"); other methods name the method.
+                "user": (
+                    self._last_unlock.get("customerType")
+                    if category in ("unlock_face", "unlock_palm")
+                    else None
                 ),
-                "message": self._last_unlock.get("alarmMessage"),
+                # Palm records leave the template unfilled:
+                # "{object} unlock the lock".
+                "message": str(self._last_unlock.get("alarmMessage") or "").replace(
+                    "{object}", str(self._last_unlock.get("customerType") or "")
+                ),
                 "record": self._last_unlock,
             }
 
