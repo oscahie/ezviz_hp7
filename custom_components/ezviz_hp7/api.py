@@ -753,6 +753,27 @@ class Hp7Api:
                 ]
         return names or None
 
+    def get_recent_alarms(self, serial: str, limit: int = 5) -> list[dict[str, Any]] | None:
+        """The ``limit`` newest alarm records for ``serial``, newest first.
+
+        An unlock is often followed (or preceded) within seconds by an
+        "Intelligent Detection Alarm" of the same person, so the newest record
+        alone loses unlocks between two polls.
+        """
+        self.ensure_client()
+        if not self._client:
+            return None
+        try:
+            payload = self._client.get_alarminfo(serial, limit=limit)
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.debug("EZVIZ HP7: get_alarminfo failed: %s", exc)
+            return None
+        for key in ("alarms", "alarmLogs", "alarmList", "alarmInfos"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                return [a for a in value if isinstance(a, dict)]
+        return None
+
     def get_latest_alarm_detail(self, serial: str) -> dict[str, Any] | None:
         """Fetch the most recent detailed alarm record for ``serial``.
 
