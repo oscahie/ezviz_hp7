@@ -24,8 +24,8 @@ EVENT_TYPE_BY_CATEGORY = {
     "unlock_app": "app",
 }
 EVENT_TYPES = [*EVENT_TYPE_BY_CATEGORY.values(), "monitor", "other"]
-# Logbook wording per event type.
-EVENT_LOG_LABELS = {
+# Display label per event type, used in "<Label> - <user>".
+EVENT_LABELS = {
     "face": "Face",
     "palm": "Palm",
     "card": "Card",
@@ -101,7 +101,7 @@ class Hp7UnlockEvent(CoordinatorEntity, EventEntity):
         when = (unlock.get("record") or {}).get("alarmStartTimeStr")
         method = unlock_event_type(unlock)
         user = unlock.get("user")
-        label = EVENT_LOG_LABELS.get(method, method)
+        label = EVENT_LABELS.get(method, method)
         event_type = f"{label} - {user}" if user else method
         if event_type not in self._attr_event_types:
             self._attr_event_types.append(event_type)
@@ -116,19 +116,6 @@ class Hp7UnlockEvent(CoordinatorEntity, EventEntity):
         )
         _LOGGER.debug("Unlock event %s (%s) at %s", event_type, user, when)
         self.async_write_ha_state()
-        # Event entities only show the type in the UI; a logbook line makes
-        # the who/how/when history readable in the Logbook.
-        if "logbook" in self.hass.config.components:
-            from homeassistant.components.logbook import async_log_entry
-
-            state = self.hass.states.get(self.entity_id)
-            async_log_entry(
-                self.hass,
-                state.name if state else "Unlock",
-                f"{label} - {user}" if user else label,
-                DOMAIN,
-                self.entity_id,
-            )
 
     @property
     def device_info(self):
