@@ -106,7 +106,8 @@ class Hp7Coordinator(DataUpdateCoordinator):
         watching = bool(
             relay is not None
             and getattr(relay, "_active_lan", False)
-            and getattr(relay, "_active_clients", 0) > 0
+            and getattr(relay, "_active_clients", 0)
+            - getattr(relay, "_snapshot_clients", 0) > 0
         )
         if watching == self._slowed_for_stream:
             return
