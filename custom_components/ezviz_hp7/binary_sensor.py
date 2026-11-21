@@ -452,13 +452,20 @@ class Hp7BinaryAlarm(CoordinatorEntity, BinarySensorEntity):
                     current_alarm_time = unlock.get("time")
                     detail = unlock.get("record")
         else:
-            triggered = (
-                self._alarm_matches(current_alarm)
-                and current_alarm_time is not None
-                and current_alarm_time != self._prev_alarm_time
+            # Pulse only on an alarm newer than any seen, of any type. The
+            # cloud now and then reports an older ring as the last alarm for
+            # one poll; `!=` against this sensor's own last match turned that
+            # into a phantom ring whenever the replayed one wasn't it (after a
+            # restart, or a ring hidden by a newer alarm within one poll).
+            # Times are camera-local "%Y-%m-%d %H:%M:%S", so string order is
+            # time order (bar the DST fall-back hour).
+            newer = current_alarm_time is not None and (
+                self._prev_alarm_time is None
+                or current_alarm_time > self._prev_alarm_time
             )
-            if triggered:
+            if newer:
                 self._prev_alarm_time = current_alarm_time
+            triggered = self._alarm_matches(current_alarm) and newer
 
         if triggered:
             self._last_trigger = dt_util.utcnow()
