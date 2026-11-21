@@ -209,7 +209,7 @@
         "name": "Unlock",
         "state_attributes": {
           "event_type": {
-            "name": "Method",
+            "name": "Event",
             "state": {
               "face": "Face",
               "palm": "Palm",
@@ -228,6 +228,18 @@
           },
           "unlock_time": {
             "name": "Unlock time"
+          },
+          "method": {
+            "name": "Method",
+            "state": {
+              "face": "Face",
+              "palm": "Palm",
+              "card": "Card",
+              "code": "Code",
+              "app": "EZVIZ app",
+              "monitor": "Monitor",
+              "other": "Other"
+            }
           }
         }
       }

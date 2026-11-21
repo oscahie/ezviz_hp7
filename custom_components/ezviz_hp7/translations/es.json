@@ -209,7 +209,7 @@
         "name": "Apertura",
         "state_attributes": {
           "event_type": {
-            "name": "Método",
+            "name": "Evento",
             "state": {
               "face": "Cara",
               "palm": "Palma",
@@ -228,6 +228,18 @@
           },
           "unlock_time": {
             "name": "Hora de apertura"
+          },
+          "method": {
+            "name": "Método",
+            "state": {
+              "face": "Cara",
+              "palm": "Palma",
+              "card": "Tarjeta",
+              "code": "Código",
+              "app": "App EZVIZ",
+              "monitor": "Monitor",
+              "other": "Otro"
+            }
           }
         }
       }

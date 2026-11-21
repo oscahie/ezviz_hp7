@@ -62,8 +62,11 @@ def unlock_event_type(unlock: dict[str, Any]) -> str:
 class Hp7UnlockEvent(CoordinatorEntity, EventEntity):
     """Fires once per lock-unlock record, so the history lists every unlock.
 
-    Event type is the method (face, palm, card, code, app, monitor, other);
-    ``user`` is the face/palm enrolment name when the method has one.
+    Event type is the method (face, palm, card, code, app, monitor, other),
+    or "<Method> - <user>" (e.g. "Palm - Oscar") when a face/palm unlock
+    names its enrolment, so the entity's state shows who opened the door.
+    Such types are added to ``event_types`` as they first appear; the
+    plain method is always in the ``method`` attribute for automations.
     """
 
     _attr_has_entity_name = True
@@ -80,6 +83,7 @@ class Hp7UnlockEvent(CoordinatorEntity, EventEntity):
         # unlock, however old, and it must not replay after a restart.
         self._primed = False
         self._prev_unlock_time: Any = None
+        self._attr_event_types = list(EVENT_TYPES)
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -95,11 +99,20 @@ class Hp7UnlockEvent(CoordinatorEntity, EventEntity):
         # alarmStartTimeStr is local time; the HP7 Pro's epoch alarmStartTime
         # runs an hour ahead of it, so the string is the one to show.
         when = (unlock.get("record") or {}).get("alarmStartTimeStr")
-        event_type = unlock_event_type(unlock)
+        method = unlock_event_type(unlock)
         user = unlock.get("user")
+        label = EVENT_LOG_LABELS.get(method, method)
+        event_type = f"{label} - {user}" if user else method
+        if event_type not in self._attr_event_types:
+            self._attr_event_types.append(event_type)
         self._trigger_event(
             event_type,
-            {"user": user, "message": unlock.get("message"), "unlock_time": when},
+            {
+                "method": method,
+                "user": user,
+                "message": unlock.get("message"),
+                "unlock_time": when,
+            },
         )
         _LOGGER.debug("Unlock event %s (%s) at %s", event_type, user, when)
         self.async_write_ha_state()
@@ -108,12 +121,11 @@ class Hp7UnlockEvent(CoordinatorEntity, EventEntity):
         if "logbook" in self.hass.config.components:
             from homeassistant.components.logbook import async_log_entry
 
-            method = EVENT_LOG_LABELS.get(event_type, event_type)
             state = self.hass.states.get(self.entity_id)
             async_log_entry(
                 self.hass,
                 state.name if state else "Unlock",
-                f"{method} · {user}" if user else method,
+                f"{label} - {user}" if user else label,
                 DOMAIN,
                 self.entity_id,
             )
