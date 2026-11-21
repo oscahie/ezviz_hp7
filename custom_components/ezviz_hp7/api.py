@@ -181,7 +181,9 @@ class Hp7Api:
             self._client._session,
             on_message_callback=on_message,
         )
-        push.connect()
+        # The broker drops the link at ~60 s without traffic, so ping more
+        # often than the library's 60 s default (which reconnected every minute).
+        push.connect(keepalive=30)
         return push
 
     def login(self, sms_code: int | None = None) -> bool:
