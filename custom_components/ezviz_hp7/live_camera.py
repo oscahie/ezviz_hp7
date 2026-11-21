@@ -2226,8 +2226,10 @@ class Hp7LiveCamera(Camera):
                 # analyzeduration to 0, so ffmpeg gave up on HEVC before the
                 # parameter sets ("unspecified size") and every snapshot
                 # failed after the 10 s timeout, holding a 4K session open.
+                # 2 s is enough once the relay has replayed its cached GOP
+                # (the usual case); HA aborts camera images after 10 s.
                 "-analyzeduration",
-                "10000000",
+                "2000000",
                 "-probesize",
                 "10000000",
                 "-f",
@@ -2251,16 +2253,19 @@ class Hp7LiveCamera(Camera):
             _LOGGER.debug("Hp7LiveCamera: ffmpeg snapshot spawn failed: %s", exc)
             return None
         try:
-            # Cold start: the session has no cached GOP yet, so ffmpeg must
-            # wait for the doorbell's next keyframe (~10-13 s observed).
-            data, _ = await asyncio.wait_for(proc.communicate(), timeout=20.0)
+            data, _ = await asyncio.wait_for(proc.communicate(), timeout=10.0)
         except asyncio.TimeoutError:
-            try:
-                proc.kill()
-            except ProcessLookupError:
-                pass
             _LOGGER.debug("Hp7LiveCamera: snapshot ffmpeg timed out")
             return None
+        finally:
+            # Also on cancellation (HA gives up on the image after 10 s):
+            # an orphaned ffmpeg stops reading but keeps its relay client,
+            # which then counts as a viewer until the relay drops it.
+            if proc.returncode is None:
+                try:
+                    proc.kill()
+                except ProcessLookupError:
+                    pass
         return data or None
 
 
