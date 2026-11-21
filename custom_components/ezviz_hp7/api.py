@@ -21,6 +21,10 @@ DEFAULT_GATE_LOCK_NO = 1
 # How long a fetched ChimeMusic blob stays valid. Must be > the coordinator
 # poll interval so consecutive ticks reuse it (#44).
 CHIME_CACHE_TTL = 60.0
+# Spacing between token re-login attempts once the client has lost its token,
+# so a sustained cloud outage doesn't turn into a login on every 15 s poll —
+# the rate-limit risk the coordinator's single-shot force_relogin avoids.
+TOKEN_RELOGIN_BACKOFF = 300.0
 
 REGION_URLS: dict[str, str] = {
     "eu": "apiieu.ezvizlife.com",
@@ -55,6 +59,8 @@ class Hp7Api:
         self._region = region
         self._token = token
         self._client: EzvizClient | None = None
+        # Monotonic deadline gating the tokenless re-login in ensure_client.
+        self._token_relogin_after: float = 0.0
         self._url = REGION_URLS.get(region, REGION_URLS["eu"])
         self.supports_door = True
         self.supports_gate = True
@@ -111,7 +117,24 @@ class Hp7Api:
         Raises:
             RuntimeError: If client initialization fails.
         """
+        if self._client and self._token:
+            return
+
         if self._client:
+            # Client without a token: force_relogin() cleared _token, then the
+            # login inside this method raised *after* _client was assigned, and
+            # the old `if self._client: return` made that permanent — unlock and
+            # snapshots dead (silently: _try_unlock logs nothing) until a restart,
+            # while polling kept working off the client's own session. Retry just
+            # the login, spaced out, and keep the client on failure so polling is
+            # unaffected (#59).
+            if time.monotonic() < self._token_relogin_after:
+                return
+            self._token_relogin_after = time.monotonic() + TOKEN_RELOGIN_BACKOFF
+            try:
+                self._login_and_store_token()
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.warning("EZVIZ HP7: token re-login failed: %s", exc)
             return
 
         try:
@@ -124,6 +147,10 @@ class Hp7Api:
 
             if not self._token:
                 self._login_and_store_token()
+        except EzvizAuthVerificationCode:
+            # Let the config flow catch this and show the SMS step.
+            self._client = None
+            raise
         except Exception as exc:
             _LOGGER.error("Failed to initialize EzvizClient: %s", exc)
             raise RuntimeError(f"Failed to initialize EZVIZ client: {exc}") from exc
@@ -322,13 +349,24 @@ class Hp7Api:
             raise RuntimeError("EZVIZ client not initialised for LAN key fetch")
 
         self._p2p_register()
+        cas = EzvizCAS(self._client.export_token())
         try:
-            info = EzvizCAS(self._client.export_token()).cas_get_encryption(bare)
+            info = cas.cas_get_encryption(bare)
+            session = (info or {}).get("Response", {}).get("Session", {})
+            key_str = str(session.get("@Key") or "")
+            if len(key_str) != 16:
+                # DirectConnect fallback: some devices (e.g. the HP7/HPD7
+                # doorbell) only mint a Session when the request carries a
+                # <Url> element. Result=1052173 = no-Session on the plain
+                # request. Retry with the device's streaming ticket as <Url>.
+                info = cas.cas_get_encryption(
+                    bare, url=self._direct_connect_url(bare)
+                )
+                session = (info or {}).get("Response", {}).get("Session", {})
+                key_str = str(session.get("@Key") or "")
         except Exception as exc:  # noqa: BLE001
             raise RuntimeError(f"CAS get-encryption failed: {exc}") from exc
 
-        session = (info or {}).get("Response", {}).get("Session", {})
-        key_str = str(session.get("@Key") or "")
         if len(key_str) != 16:
             result = str((info or {}).get("Response", {}).get("Result"))
             # 1052175 (and friends): CAS accepts the request but refuses to
@@ -350,6 +388,20 @@ class Hp7Api:
         key_bytes = key_str.encode("ascii")
         self._lan_aes_cache[bare] = (key_bytes, time.monotonic())
         return key_bytes
+
+    def _direct_connect_url(self, bare: str) -> str:
+        """Streaming-ticket URL for the CAS DirectConnect ``<Url>`` element.
+
+        Falls back to an empty string, which still triggers the Session on
+        devices that need the element (CAS does not validate its content).
+        """
+        try:
+            resp = self._client._request_json(  # noqa: SLF001
+                "GET", f"/v3/streaming/ticket/{bare}/1"
+            )
+            return str((resp or {}).get("ticket") or "")
+        except Exception:  # noqa: BLE001
+            return ""
 
     def invalidate_lan_aes_key(self, serial: str | None = None) -> None:
         """Drop cached LAN AES key(s); call when decrypt fails (re-pair)."""
@@ -391,6 +443,32 @@ class Hp7Api:
             _LOGGER.debug("EZVIZ HP7: local IP resolve failed for %s: %s", serial, exc)
             return None
 
+    def _unlock_session_ready(self, serial: str) -> bool:
+        """Return True if a remote unlock can be sent, logging why not if it can't.
+
+        Checked once per press: unlock_door/unlock_gate each try two lock
+        numbers, and a missing session would otherwise be logged twice.
+        Without this log a dead session showed up only as the button's
+        generic "Unlock ... failed", which hid #59/#63 for days.
+        """
+        try:
+            self.ensure_client()
+        except RuntimeError as exc:
+            _LOGGER.warning(
+                "Remote unlock skipped (serial=%s): no EZVIZ cloud client: %s",
+                serial, exc,
+            )
+            return False
+        if not self._token or not self._client:
+            _LOGGER.warning(
+                "Remote unlock skipped (serial=%s): no EZVIZ cloud token, the "
+                "last login failed (see earlier log lines). Reload the "
+                "integration if this persists",
+                serial,
+            )
+            return False
+        return True
+
     def _try_unlock(self, serial: str, lock_no: int) -> bool:
         """Attempt to unlock a specific lock.
 
@@ -401,8 +479,17 @@ class Hp7Api:
         Returns:
             True if unlock was successful.
         """
-        self.ensure_client()
+        try:
+            self.ensure_client()
+        except RuntimeError:
+            # The coordinator's force_relogin can drop the client between the
+            # session check and this call; ensure_client already logged why.
+            return False
         if not self._token or not self._client:
+            _LOGGER.debug(
+                "Remote unlock skipped (serial=%s, lock_no=%s): session lost "
+                "mid-press", serial, lock_no,
+            )
             return False
 
         user_id = self._token.get("username") or self._username
@@ -425,6 +512,8 @@ class Hp7Api:
         Returns:
             True if unlock was successful.
         """
+        if not self._unlock_session_ready(serial):
+            return False
         return self._try_unlock(serial, DEFAULT_DOOR_LOCK_NO) or self._try_unlock(
             serial, DEFAULT_GATE_LOCK_NO
         )
@@ -438,6 +527,8 @@ class Hp7Api:
         Returns:
             True if unlock was successful.
         """
+        if not self._unlock_session_ready(serial):
+            return False
         return self._try_unlock(serial, DEFAULT_GATE_LOCK_NO) or self._try_unlock(
             serial, DEFAULT_DOOR_LOCK_NO
         )
@@ -1151,7 +1242,14 @@ class Hp7Api:
 
         nodisturb = info.get("NODISTURB") or {}
         if isinstance(nodisturb, dict):
+            # HP7 (fw 5.3.6) has no "enable" here, only
+            # {"alarmEnable": 0|1, "callingEnable": 0|1}, and the PUT sent by
+            # set_dnd flips alarmEnable. Without this fallback dnd_on is never
+            # set and the switch drops to unknown once the optimistic window
+            # after a toggle runs out.
             enable = nodisturb.get("enable")
+            if enable is None:
+                enable = nodisturb.get("alarmEnable")
             coerced = self._coerce_bool(enable)
             if coerced is not None:
                 out["dnd_on"] = coerced
