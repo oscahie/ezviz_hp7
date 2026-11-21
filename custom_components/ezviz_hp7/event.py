@@ -29,7 +29,7 @@ EVENT_LOG_LABELS = {
     "face": "Face",
     "palm": "Palm",
     "card": "Card",
-    "code": "Code",
+    "code": "Passcode",
     "app": "EZVIZ app",
     "monitor": "Monitor",
     "other": "Unlock",
