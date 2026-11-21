@@ -18,7 +18,11 @@ ALARM_TYPE_UNLOCK_LOCK = 10242
 
 
 # customerType of the non-biometric unlock methods seen on HP7 / HP7 Pro.
-UNLOCK_CATEGORY_BY_CUSTOMER = {"Card": "unlock_rfid", "EZVIZ app": "unlock_app"}
+UNLOCK_CATEGORY_BY_CUSTOMER = {
+    "Card": "unlock_rfid",
+    "EZVIZ app": "unlock_app",
+    "Passcode": "unlock_code",
+}
 
 
 def unlock_category_from_detail(
@@ -29,8 +33,8 @@ def unlock_category_from_detail(
     The HP7 Pro puts the enrolment name in ``customerType`` for face and palm
     unlocks ("Oscar unlock the lock"), so the alarm-name strings never say
     "face" or "palm". Match the name against the device's FaceInfo/VeinInfo
-    lists; it is only trusted when exactly one list contains it. Card and app
-    unlocks carry a fixed ``customerType`` ("Card", "EZVIZ app").
+    lists; it is only trusted when exactly one list contains it. Card, app and code
+    unlocks carry a fixed ``customerType`` ("Card", "EZVIZ app", "Passcode").
     """
     if not isinstance(detail, dict) or detail.get("alarmType") != ALARM_TYPE_UNLOCK_LOCK:
         return None
