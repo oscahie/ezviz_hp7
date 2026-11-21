@@ -17,6 +17,10 @@ from .const import UPDATE_INTERVAL_SEC
 ALARM_TYPE_UNLOCK_LOCK = 10242
 
 
+# customerType of the non-biometric unlock methods seen on HP7 / HP7 Pro.
+UNLOCK_CATEGORY_BY_CUSTOMER = {"Card": "unlock_rfid", "EZVIZ app": "unlock_app"}
+
+
 def unlock_category_from_detail(
     detail: dict[str, Any] | None, biometric_names: dict[str, list[str]] | None
 ) -> str | None:
@@ -25,15 +29,20 @@ def unlock_category_from_detail(
     The HP7 Pro puts the enrolment name in ``customerType`` for face and palm
     unlocks ("Oscar unlock the lock"), so the alarm-name strings never say
     "face" or "palm". Match the name against the device's FaceInfo/VeinInfo
-    lists; it is only trusted when exactly one list contains it.
+    lists; it is only trusted when exactly one list contains it. Card and app
+    unlocks carry a fixed ``customerType`` ("Card", "EZVIZ app").
     """
     if not isinstance(detail, dict) or detail.get("alarmType") != ALARM_TYPE_UNLOCK_LOCK:
         return None
     who = detail.get("customerType")
-    if not isinstance(who, str) or not who or not biometric_names:
+    if not isinstance(who, str) or not who:
         return None
-    hits = [cat for cat, names in biometric_names.items() if who in names]
-    return hits[0] if len(hits) == 1 else None
+    if biometric_names:
+        hits = [cat for cat, names in biometric_names.items() if who in names]
+        if len(hits) == 1:
+            return hits[0]
+    return UNLOCK_CATEGORY_BY_CUSTOMER.get(who)
+
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -110,6 +119,7 @@ class Hp7Coordinator(DataUpdateCoordinator):
         self._key_list: list[dict[str, Any]] | None = None
         self._key_list_age: int = 10**6  # force first fetch
         self._biometric_names: dict[str, list[str]] | None = None
+        self._last_unlock: dict[str, Any] | None = None
         # Relay handle, set by the camera platform once it exists. Used to
         # back polling off while someone is watching the LAN stream (#44).
         self.live_relay: Any = None
@@ -195,11 +205,20 @@ class Hp7Coordinator(DataUpdateCoordinator):
 
         alarm_time = data.get("last_alarm_time")
         if alarm_time and alarm_time != self._last_alarm_time:
-            detail = await self.hass.async_add_executor_job(
-                self.api.get_latest_alarm_detail, self.serial
+            recent = await self.hass.async_add_executor_job(
+                self.api.get_recent_alarms, self.serial
             )
-            if detail:
-                self._last_alarm_detail = detail
+            if recent:
+                self._last_alarm_detail = recent[0]
+                # Newest lock-unlock record, which a detection alarm right
+                # after it would otherwise hide from the sensors.
+                self._last_unlock = next(
+                    (
+                        a for a in recent
+                        if a.get("alarmType") == ALARM_TYPE_UNLOCK_LOCK
+                    ),
+                    self._last_unlock,
+                )
             self._last_alarm_time = alarm_time
         if self._last_alarm_detail is not None:
             data["latest_alarm_detail"] = self._last_alarm_detail
@@ -222,10 +241,14 @@ class Hp7Coordinator(DataUpdateCoordinator):
         if self._key_list is not None:
             data["keys"] = self._key_list
 
-        category = unlock_category_from_detail(
-            self._last_alarm_detail, self._biometric_names
-        )
-        if category is not None:
-            data["unlock_category"] = category
+        if self._last_unlock is not None:
+            data["unlock"] = {
+                "time": self._last_unlock.get("alarmStartTime"),
+                "category": unlock_category_from_detail(
+                    self._last_unlock, self._biometric_names
+                ),
+                "message": self._last_unlock.get("alarmMessage"),
+                "record": self._last_unlock,
+            }
 
         return data
