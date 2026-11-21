@@ -164,6 +164,26 @@ class Hp7Api:
             _LOGGER.warning("EZVIZ HP7: forced re-login failed: %s", exc)
             return False
 
+    def start_push(self, on_message: Any) -> Any:
+        """Connect to the EZVIZ push (MQTT) service and return the client.
+
+        The session is refreshed first: REST calls survive a stale sessionId
+        but the push start rejects it with 401. Blocking; run in an executor.
+        """
+        from .pylocalapi.mqtt import MQTTClient
+
+        self.ensure_client()
+        if not self._client:
+            raise RuntimeError("Client not initialized")
+        self._token = self._client.login()
+        push = MQTTClient(
+            self._client.export_token(),
+            self._client._session,
+            on_message_callback=on_message,
+        )
+        push.connect()
+        return push
+
     def login(self, sms_code: int | None = None) -> bool:
         """Authenticate with EZVIZ server.
 
