@@ -743,6 +743,8 @@ class Hp7StreamRelay:
         self._active_lan: bool = False
         self._idle_handle: Optional[asyncio.TimerHandle] = None
         self._active_clients: int = 0
+        # Relay clients that are only one-shot snapshot grabs (not viewers).
+        self._snapshot_clients: int = 0
 
     @property
     def port(self) -> int:
@@ -2203,6 +2205,15 @@ class Hp7LiveCamera(Camera):
         """
         if self._relay.port == 0:
             return None
+        # Counted so the coordinator doesn't treat a thumbnail grab as a
+        # viewer and slow its polling (and unlock detection) to 60 s.
+        self._relay._snapshot_clients += 1
+        try:
+            return await self._grab_snapshot()
+        finally:
+            self._relay._snapshot_clients -= 1
+
+    async def _grab_snapshot(self) -> bytes | None:
         url = self._relay.stream_url
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -2211,12 +2222,21 @@ class Hp7LiveCamera(Camera):
                 "-hide_banner",
                 "-loglevel",
                 "error",
+                # Same input options as the MJPEG path: +nobuffer forces
+                # analyzeduration to 0, so ffmpeg gave up on HEVC before the
+                # parameter sets ("unspecified size") and every snapshot
+                # failed after the 10 s timeout, holding a 4K session open.
+                "-analyzeduration",
+                "10000000",
+                "-probesize",
+                "10000000",
+                "-f",
+                "mpegts",
                 "-fflags",
-                "+nobuffer",
-                "-flags",
-                "low_delay",
+                "+discardcorrupt",
                 "-i",
                 url,
+                "-an",
                 "-frames:v",
                 "1",
                 "-q:v",
@@ -2231,7 +2251,9 @@ class Hp7LiveCamera(Camera):
             _LOGGER.debug("Hp7LiveCamera: ffmpeg snapshot spawn failed: %s", exc)
             return None
         try:
-            data, _ = await asyncio.wait_for(proc.communicate(), timeout=10.0)
+            # Cold start: the session has no cached GOP yet, so ffmpeg must
+            # wait for the doorbell's next keyframe (~10-13 s observed).
+            data, _ = await asyncio.wait_for(proc.communicate(), timeout=20.0)
         except asyncio.TimeoutError:
             try:
                 proc.kill()
