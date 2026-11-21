@@ -62,7 +62,9 @@ ALARM_MAP: list[tuple[list[str], str, str, BinarySensorDeviceClass | None, str]]
         "mdi:doorbell",
     ),
     (
-        ["EZVIZ app open the gate", "Monitor open the gate"],
+        # Any method: the HP7 Pro also opens the gate on a long card tap
+        # ("Card open the gate"), and face/code may too.
+        ["open the gate"],
         "gate_open",
         None,
         "mdi:gate-open",
