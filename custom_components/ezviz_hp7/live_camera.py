@@ -2234,12 +2234,16 @@ class Hp7StreamRelay:
                     # the picture freezes while the separately re-encoded
                     # audio keeps playing. With +genpts alone the same
                     # capture yields a clean 66.667 ms spacing (15 fps).
-                    # Wallclock stays on the raw elementary inputs below and
-                    # on the cloud path, which genuinely have no timestamps.
+                    # Wallclock stays on the cloud path's raw elementary
+                    # inputs, which genuinely have no timestamps.
                     "-f", "mpeg",
                     "-i", f"tcp://127.0.0.1:{raw_port}",
+                    # No wallclock here either: arrival-time stamps on the
+                    # audio made the muxer drop 3-5 video frames every ~8 s
+                    # and sent audio timestamps backwards (WebRTC mode, HP7
+                    # Pro). Without it ffmpeg counts samples (1024 per AAC
+                    # frame), which follows the device clock like the video.
                     "-analyzeduration", "200000", "-probesize", "200000",
-                    *wallclock,
                     "-f", "aac",
                     "-i", f"tcp://127.0.0.1:{a_port}",
                     # Video from the raw MPEG-PS input (its mislabelled MP2
