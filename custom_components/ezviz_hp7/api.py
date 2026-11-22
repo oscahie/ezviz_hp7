@@ -5,7 +5,7 @@ import hashlib
 import json
 import logging
 import time
-from typing import Any
+from typing import Any, Callable
 
 import requests
 from requests.exceptions import RequestException
@@ -70,6 +70,10 @@ class Hp7Api:
         # authorises this client) and is stable until the doorbell is
         # re-paired, so we cache it for the session.
         self._lan_aes_cache: dict[str, tuple[bytes, float]] = {}
+        # Other EZVIZ accounts configured in HA (other entries). CAS only
+        # mints the LAN key for the device owner, so an entry logged in with
+        # a shared account (e.g. one kept for push) borrows it from there.
+        self.lan_key_fallbacks: Callable[[], list["Hp7Api"]] | None = None
         # bare_serial -> last good LAN IP (survives cloud 504s, see
         # get_local_ip).
         self._lan_ip_cache: dict[str, str] = {}
@@ -370,6 +374,10 @@ class Hp7Api:
 
         Runs the p2p-register, then queries CAS get-encryption on the bare
         serial. Cached per session. Raises RuntimeError if unavailable.
+
+        CAS refuses the key to accounts the device is only shared with
+        (Result=1052175, empty key). Then the other EZVIZ accounts set up in
+        HA are tried, so the owner's account can supply it.
         """
         bare = self._bare_serial(serial)
         if not force:
@@ -377,6 +385,40 @@ class Hp7Api:
             if cached and (time.monotonic() - cached[1]) < self.LAN_AES_KEY_TTL:
                 return cached[0]
 
+        try:
+            key_bytes = self._fetch_lan_aes_key_from_cas(bare)
+        except RuntimeError as own_exc:
+            key_bytes = None
+            others = []
+            if self.lan_key_fallbacks is not None:
+                try:
+                    others = [a for a in self.lan_key_fallbacks() if a is not self]
+                except Exception:  # noqa: BLE001
+                    others = []
+            for other in others:
+                if other._username == self._username:  # noqa: SLF001
+                    continue
+                try:
+                    key_bytes = other._fetch_lan_aes_key_from_cas(bare)  # noqa: SLF001
+                except Exception as exc:  # noqa: BLE001
+                    _LOGGER.debug(
+                        "EZVIZ HP7: LAN key for %s not available from another "
+                        "account either: %s", bare, exc,
+                    )
+                    continue
+                _LOGGER.info(
+                    "EZVIZ HP7: LAN key for %s refused to this account (%s); "
+                    "using the key from another configured EZVIZ account",
+                    bare, own_exc,
+                )
+                break
+            if key_bytes is None:
+                raise
+        self._lan_aes_cache[bare] = (key_bytes, time.monotonic())
+        return key_bytes
+
+    def _fetch_lan_aes_key_from_cas(self, bare: str) -> bytes:
+        """Ask CAS for the LAN key with this account. Raises RuntimeError."""
         self.ensure_client()
         if not self._client:
             raise RuntimeError("EZVIZ client not initialised for LAN key fetch")
@@ -410,17 +452,16 @@ class Hp7Api:
             hint = ""
             if result in ("1052175", "1052170"):
                 hint = (
-                    " — if this is a CP5/CP7, turn OFF Image/Video Encryption "
-                    "in the EZVIZ app (device Settings); the LAN stream needs "
-                    "it disabled"
+                    " — CAS only gives this key to the device owner's account; "
+                    "if this entry uses a shared account, also set up an entry "
+                    "with the owner's account. On a CP5/CP7, turn OFF "
+                    "Image/Video Encryption in the EZVIZ app (device Settings)"
                 )
             raise RuntimeError(
                 f"invalid LAN AES key from CAS (Result={result}, "
                 f"key={key_str!r}){hint}"
             )
-        key_bytes = key_str.encode("ascii")
-        self._lan_aes_cache[bare] = (key_bytes, time.monotonic())
-        return key_bytes
+        return key_str.encode("ascii")
 
     def _direct_connect_url(self, bare: str) -> str:
         """Streaming-ticket URL for the CAS DirectConnect ``<Url>`` element.
