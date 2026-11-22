@@ -1,6 +1,7 @@
 """EZVIZ HP7 API client."""
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import time
@@ -170,16 +171,26 @@ class Hp7Api:
         The session is refreshed first: REST calls survive a stale sessionId
         but the push start rejects it with 401. Blocking; run in an executor.
         """
+        from .pylocalapi.constants import FEATURE_CODE
         from .pylocalapi.mqtt import MQTTClient
 
         self.ensure_client()
         if not self._client:
             raise RuntimeError("Client not initialized")
         self._token = self._client.login()
+        token = self._client.export_token()
+        # The push service delivers to only the latest client registered with
+        # a given "mac": with the per-host default, a second entry on another
+        # EZVIZ account (e.g. a shared one) silently took the first one's
+        # pushes. Make it unique per account.
+        mac = hashlib.md5(
+            f"{FEATURE_CODE}:{token.get('username')}".encode()
+        ).hexdigest()
         push = MQTTClient(
-            self._client.export_token(),
+            token,
             self._client._session,
             on_message_callback=on_message,
+            mac=mac,
         )
         # The broker drops the link at ~60 s without traffic, so ping more
         # often than the library's 60 s default (which reconnected every minute).

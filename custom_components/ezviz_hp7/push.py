@@ -22,9 +22,10 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-# Seconds after a push at which to refresh. The alarm record lags the push
-# by ~3-5 s; the last one catches a slow cloud.
-REFRESH_DELAYS = (1, 5, 10)
+# Seconds after a push at which to refresh. The push itself lags the event
+# by ~3 s and the alarm record is normally listed by then; the later ones
+# catch a slow cloud.
+REFRESH_DELAYS = (0, 4, 10)
 RETRY_START_SEC = 300
 
 
