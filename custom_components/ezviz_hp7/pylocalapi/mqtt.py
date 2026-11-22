@@ -156,6 +156,7 @@ class MQTTClient:
         on_message_callback: Callable[[dict[str, Any]], None] | None = None,
         *,
         max_messages: int = 1000,
+        mac: str = FEATURE_CODE,
     ) -> None:
         """Initialize the Ezviz MQTT client.
 
@@ -193,6 +194,7 @@ class MQTTClient:
         self._topic: str = f"{MQTT_APP_KEY}/#"
         self._on_message_callback = on_message_callback
         self._max_messages: int = max_messages
+        self._mac: str = mac
 
         self._mqtt_data: MqttData = {
             "mqtt_clientid": None,
@@ -380,7 +382,7 @@ class MQTTClient:
         payload = {
             "appKey": MQTT_APP_KEY,
             "clientType": "5",
-            "mac": FEATURE_CODE,
+            "mac": self._mac,
             "token": "123456",
             "version": "v1.3.0",
         }

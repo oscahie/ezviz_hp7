@@ -34,6 +34,7 @@ from .const import (
 )
 from .api import Hp7Api
 from .coordinator import Hp7Coordinator
+from .push import Hp7PushListener
 from .device_info import DEFAULT_MODEL, detect_model
 
 _LOGGER = logging.getLogger(__name__)
@@ -197,6 +198,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "coordinator": coordinator,
     }
 
+    # Cloud push -> immediate refresh, so rings/unlocks don't wait for the poll.
+    push = Hp7PushListener(hass, api, coordinator)
+    hass.data[DOMAIN][entry.entry_id]["push"] = push
+    entry.async_create_background_task(hass, push.async_start(), "ezviz_hp7_push")
+
     _async_register_services(hass)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -333,6 +339,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if unload_ok:
         data = hass.data.get(DOMAIN, {}).pop(entry.entry_id, {})
+        push: Hp7PushListener | None = data.get("push")
+        if push:
+            await push.async_stop()
         api: Hp7Api | None = data.get("api")
         if api:
             # api.close() does a synchronous HTTP logout (requests.delete);
