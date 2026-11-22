@@ -41,9 +41,10 @@ class Hp7PushListener:
         # its bare monitor part ("BK5833838" of "BK5833838-BK5832013") and
         # the monitor serial.
         serial = coordinator.serial
-        self._serials = {
-            s for s in (serial, serial.split("-")[0], coordinator.monitor_serial) if s
-        }
+        monitors = coordinator.monitor_serial or []
+        if isinstance(monitors, str):
+            monitors = [monitors]
+        self._serials = {s for s in (serial, serial.split("-")[0], *monitors) if s}
         self._push: Any = None
         self._retry_unsub: Any = None
         # Pending refresh timers of the latest push; a new push replaces them.
