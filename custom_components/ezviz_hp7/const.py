@@ -48,12 +48,23 @@ VIDEO_CODECS = [
 #           firmware whose VTM channel never pushes — #33/#36/#37). Requires
 #           HA to be on the same LAN as the doorbell. LAN protocol reverse
 #           engineered by albrzmr.
-#   auto  — try LAN first, fall back to cloud.
+#   local_sdk — LAN live view on the HCNetSDK command port (8000), logging
+#           in with the device's verification code. Unlike "local" it needs
+#           no LAN key from the cloud (CAS), which EZVIZ refuses to accounts
+#           the device is only shared with.
+#   auto  — try LAN first (CPD7, then port 8000 when a verification code is
+#           set), fall back to cloud.
 CONF_STREAM_SOURCE = "stream_source"
 STREAM_SOURCE_CLOUD = "cloud"
 STREAM_SOURCE_LOCAL = "local"
+STREAM_SOURCE_LOCAL_SDK = "local_sdk"
 STREAM_SOURCE_AUTO = "auto"
-STREAM_SOURCES = [STREAM_SOURCE_CLOUD, STREAM_SOURCE_LOCAL, STREAM_SOURCE_AUTO]
+STREAM_SOURCES = [
+    STREAM_SOURCE_CLOUD,
+    STREAM_SOURCE_LOCAL,
+    STREAM_SOURCE_LOCAL_SDK,
+    STREAM_SOURCE_AUTO,
+]
 
 # How the live view is delivered to the frontend:
 #   webrtc — HA Stream/go2rtc (HLS/WebRTC): has audio + low latency, but
@@ -96,6 +107,12 @@ CONF_DIAGNOSTIC_DUMPS = "diagnostic_dumps"
 # (#47), so let the user paste the 6-character code from the device label —
 # it is the same material. Empty = try the cloud, then give up.
 CONF_ENCRYPTION_KEY = "encryption_key"
+
+# Device verification code (6 letters on the label) used to log in to the
+# HCNetSDK command port for the "local_sdk" source. Kept apart from the
+# encryption key: changing the video encryption password in the app does not
+# change this login code. Empty = fall back to the encryption key.
+CONF_VERIFICATION_CODE = "verification_code"
 
 # Platforms to set up
 PLATFORMS = ["button", "sensor", "binary_sensor", "camera", "switch", "number", "event"]
