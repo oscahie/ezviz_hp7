@@ -300,6 +300,8 @@ class HcNetSdkCommandPortGeneratedMultiSocketPlan:
 
 def hcnetsdk_command_port_native_lan_live_view_plan(
     name: str = HCNETSDK_COMMAND_PORT_NATIVE_PLAN_APP_LAN_LIVE_VIEW,
+    *,
+    channel: int = 1,
 ) -> HcNetSdkCommandPortGeneratedMultiSocketPlan:
     """Return an app-observed generated port-8000 LAN live-view plan.
 
@@ -308,7 +310,8 @@ def hcnetsdk_command_port_native_lan_live_view_plan(
     native-prefix media socket, bounded media keepalives, then an I-frame
     request. The media socket deliberately keeps the native 64-byte ``IMKH``
     response as prefix before the first media frame by not reading it as a
-    control response.
+    control response. ``channel`` is the preview channel (HP7 door stations
+    stream on IP channel 33).
     """
     if name != HCNETSDK_COMMAND_PORT_NATIVE_PLAN_APP_LAN_LIVE_VIEW:
         raise PyEzvizError(f"Unsupported HCNetSDK native command-port plan: {name}")
@@ -383,7 +386,7 @@ def hcnetsdk_command_port_native_lan_live_view_plan(
                 (
                     _hcnetsdk_template(
                         0x30000,
-                        "000000010000000000000401",
+                        f"{channel:08x}0000000000000401",
                         addend_delta=5,
                     ),
                 ),
@@ -1073,6 +1076,13 @@ class HcNetSdkCommandPortGeneratedMultiSocketMediaStream:
         if self._stream is not None:
             self._stream.close()
             self._stream = None
+
+    @property
+    def media_socket(self) -> Any:
+        """Socket carrying the media after ``start()``, for raw reads."""
+        if self._stream is None or self._stream._media_client is None:  # noqa: SLF001
+            raise PyEzvizError("HCNetSDK generated command-port stream is not started")
+        return self._stream._media_client.sock  # noqa: SLF001
 
     def _login_client(self) -> HcNetSdkCommandPortClient:
         kwargs: dict[str, Any] = {"timeout": self.timeout}

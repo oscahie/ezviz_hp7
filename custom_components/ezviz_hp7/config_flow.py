@@ -30,6 +30,7 @@ from .const import (
     STREAM_MODES,
     CONF_DIAGNOSTIC_DUMPS,
     CONF_ENCRYPTION_KEY,
+    CONF_VERIFICATION_CODE,
     CONF_STREAM_QUALITY,
     STREAM_QUALITY_MAIN,
     STREAM_QUALITIES,
@@ -358,6 +359,9 @@ class OptionsFlow(config_entries.OptionsFlow):
                 quality = STREAM_QUALITY_MAIN
             dumps = bool(user_input.get(CONF_DIAGNOSTIC_DUMPS, False))
             enc_key = str(user_input.get(CONF_ENCRYPTION_KEY) or "").strip()
+            verify_code = str(
+                user_input.get(CONF_VERIFICATION_CODE) or ""
+            ).strip()
             return self.async_create_entry(
                 title="",
                 data={
@@ -371,6 +375,7 @@ class OptionsFlow(config_entries.OptionsFlow):
                     CONF_STREAM_QUALITY: quality,
                     CONF_DIAGNOSTIC_DUMPS: dumps,
                     CONF_ENCRYPTION_KEY: enc_key,
+                    CONF_VERIFICATION_CODE: verify_code,
                 },
             )
 
@@ -464,6 +469,13 @@ class OptionsFlow(config_entries.OptionsFlow):
             )
             or ""
         )
+        current_verify_code = str(
+            self.config_entry.options.get(
+                CONF_VERIFICATION_CODE,
+                self.config_entry.data.get(CONF_VERIFICATION_CODE, ""),
+            )
+            or ""
+        )
         current_dumps = bool(
             self.config_entry.options.get(
                 CONF_DIAGNOSTIC_DUMPS,
@@ -495,6 +507,9 @@ class OptionsFlow(config_entries.OptionsFlow):
                 ): vol.In(STREAM_QUALITIES),
                 vol.Optional(
                     CONF_ENCRYPTION_KEY, default=current_enc_key
+                ): str,
+                vol.Optional(
+                    CONF_VERIFICATION_CODE, default=current_verify_code
                 ): str,
                 vol.Optional(
                     CONF_DIAGNOSTIC_DUMPS, default=current_dumps
