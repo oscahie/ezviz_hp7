@@ -151,11 +151,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     try:
         api = Hp7Api(username, password, region, token=token)
-        api.lan_key_fallbacks = lambda: [
-            d["api"]
-            for d in hass.data.get(DOMAIN, {}).values()
-            if isinstance(d, dict) and d.get("api") is not None
-        ]
         await hass.async_add_executor_job(api.login)
         await hass.async_add_executor_job(api.detect_capabilities, serial)
     except Exception as exc:
