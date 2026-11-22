@@ -116,3 +116,68 @@ async def test_auto_without_a_code_goes_straight_to_cloud(started):
     src = await _relay("auto")._open_source(asyncio.get_running_loop(), MagicMock())
     assert started == ["cpd7", "cloud"]
     assert src == "CLOUD"
+
+
+class _ScrambledAfter:
+    """PesParser stand-in: reports 8 scrambled packets after ``n`` feeds."""
+
+    def __init__(self, n):
+        self._n = n
+        self.scrambled_packets = 0
+
+    def feed(self, _data):
+        self._n -= 1
+        if self._n <= 0:
+            self.scrambled_packets = 8
+        return []
+
+
+def _lan_relay(**kwargs) -> Hp7StreamRelay:
+    relay = _relay("local_sdk", **kwargs)
+    relay._active_lan = True
+    return relay
+
+
+def test_startup_hold_decides_before_releasing_anything(monkeypatch):
+    monkeypatch.setattr(live_camera, "PesParser", lambda: _ScrambledAfter(3))
+    relay = _lan_relay(encryption_key="KEY")
+
+    def payloads():
+        for i in range(5):
+            yield bytes([i])
+
+    calls = []
+    monkeypatch.setattr(
+        Hp7StreamRelay, "_check_scrambled", lambda self, parser: calls.append(parser)
+    )
+    gen = relay._hold_until_scrambling_known(payloads())
+    assert next(gen) == b"\x00"
+    assert len(calls) == 1  # scrambling handled before the first payload
+    assert list(gen) == [b"\x01", b"\x02", b"\x03", b"\x04"]
+
+
+def test_startup_hold_is_skipped_without_a_configured_key():
+    relay = _lan_relay()
+    assert list(relay._hold_until_scrambling_known([b"a", b"b"])) == [b"a", b"b"]
+
+
+def test_decrypted_output_waits_for_the_encryption_mode(monkeypatch):
+    from custom_components.ezviz_hp7.pylocalapi import stream
+
+    evidence = iter([(5, 5), (7, 7)])
+    monkeypatch.setattr(
+        stream, "hevc_ps_non_irap_slices_look_clear", lambda chunk: next(evidence)
+    )
+    monkeypatch.setattr(stream, "mpeg_ps_decryptable_prefix_length", len)
+    modes = []
+
+    def fake_decrypt(chunk, key, *, nalu_header_size, encrypted_nal_types):
+        modes.append(encrypted_nal_types is not None)
+        return chunk
+
+    monkeypatch.setattr(stream, "decrypt_hikvision_ps_video", fake_decrypt)
+    relay = _lan_relay(encryption_key="KEY")
+    relay._decrypt_key = "KEY"
+    assert relay._maybe_decrypt(PACK) == b""
+    assert relay._maybe_decrypt(PACK + b"x") == PACK + PACK + b"x"
+    assert modes == [True, True]  # both chunks decrypted as IRAP-only

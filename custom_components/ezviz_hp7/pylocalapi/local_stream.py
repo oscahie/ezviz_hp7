@@ -404,7 +404,7 @@ def hcnetsdk_command_port_native_lan_live_view_plan(
             ),
             _hcnetsdk_generated_step(
                 "keyframe",
-                _hcnetsdk_template(0x90100, "00000001", addend_delta=5),
+                _hcnetsdk_template(0x90100, f"{channel:08x}", addend_delta=5),
             ),
         )
     )

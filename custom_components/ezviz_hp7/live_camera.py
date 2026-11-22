@@ -52,7 +52,7 @@ import socket
 import threading
 import time
 from contextlib import closing
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any, Iterable, Iterator, List, Optional
 
 from homeassistant.components.camera import Camera
 from homeassistant.config_entries import ConfigEntry
@@ -381,6 +381,11 @@ OUTPUT_STALL_TIMEOUT = 30.0
 # GOP exceeds this the cache is dropped for that GOP (new viewers fall back
 # to waiting for the next keyframe — the pre-cache behaviour).
 GOP_CACHE_MAX = 8 * 1024 * 1024
+# Most stream held back while deciding IRAP-only vs full encryption.
+DECRYPT_DECIDE_MAX = 4 * 1024 * 1024
+# Most stream held back at session start to see whether the first keyframe
+# is scrambled, when an encryption key is configured.
+STARTUP_HOLD_MAX = 2 * 1024 * 1024
 # Interval between relay progress log lines (#44).
 PROGRESS_LOG_SEC = 60.0
 # A subscriber queue saturated this long with nothing draining it has no live
@@ -902,6 +907,8 @@ class Hp7StreamRelay:
         # 2 = HEVC (NAL header kept clear), 0 = H.264 (NAL header encrypted).
         self._nalu_header_size = 2
         self._slice_evidence = [0, 0]
+        # Decryptable chunks held while that is undecided.
+        self._decrypt_undecided: List[bytes] = []
         # GOP cache (#37): the stream since the last keyframe. A new viewer
         # can only start painting from an IDR, and some doorbells emit
         # keyframes tens of seconds apart — replaying this to each new
@@ -1251,13 +1258,30 @@ class Hp7StreamRelay:
                         "IRAP-only" if self._irap_only_crypt else "full",
                         seen_clear, seen, self._serial,
                     )
-            return decrypt_hikvision_ps_video(
-                chunk,
-                self._decrypt_key,
-                nalu_header_size=self._nalu_header_size,
-                encrypted_nal_types=(
-                    HEVC_IRAP_AND_PARAM_SET_NAL_TYPES if self._irap_only_crypt else None
-                ),
+                elif (
+                    self._nalu_header_size == 2
+                    and sum(map(len, self._decrypt_undecided)) < DECRYPT_DECIDE_MAX
+                ):
+                    # Decrypting the first keyframe's P slices in the wrong
+                    # mode corrupts the whole GOP, so the picture only
+                    # appears at the next keyframe (4 s on an HP7 Pro). Hold
+                    # them back until the mode is known (~12 frames).
+                    self._decrypt_undecided.append(chunk)
+                    return b""
+            chunks = self._decrypt_undecided + [chunk]
+            self._decrypt_undecided = []
+            return b"".join(
+                decrypt_hikvision_ps_video(
+                    c,
+                    self._decrypt_key,
+                    nalu_header_size=self._nalu_header_size,
+                    encrypted_nal_types=(
+                        HEVC_IRAP_AND_PARAM_SET_NAL_TYPES
+                        if self._irap_only_crypt
+                        else None
+                    ),
+                )
+                for c in chunks
             )
         except Exception as exc:  # noqa: BLE001
             self._decrypt_failed = True
@@ -1340,6 +1364,45 @@ class Hp7StreamRelay:
             )
         except Exception as exc:  # noqa: BLE001
             _LOGGER.debug("Hp7StreamRelay: could not raise OTP repair: %s", exc)
+
+    def _hold_until_scrambling_known(
+        self, payloads: Iterable[bytes]
+    ) -> Iterator[bytes]:
+        """Hold the first LAN payloads until it is known whether they are scrambled.
+
+        Scrambling is only noticed after several packets of the first
+        keyframe have gone by, and that keyframe is then undecodable, so the
+        picture waited for the next one (4 s on an HP7 Pro). With a key
+        configured, look first and decrypt from the start. Clear streams are
+        released once 256 KB past the first keyframe show no scrambling.
+        """
+        payloads = iter(payloads)
+        if not (
+            self._active_lan and self._configured_key and self._decrypt_key is None
+        ):
+            yield from payloads
+            return
+        probe = PesParser()
+        held: List[bytes] = []
+        size = 0
+        keyframe_at: Optional[int] = None
+        for body in payloads:
+            held.append(body)
+            size += len(body)
+            probe.feed(body)
+            if keyframe_at is None and _has_keyframe(body):
+                keyframe_at = size - len(body)
+            if probe.scrambled_packets >= 8:
+                self._check_scrambled(probe)
+                break
+            if (
+                keyframe_at is not None
+                and size - keyframe_at >= 256 * 1024
+                and probe.scrambled_packets == 0
+            ) or size >= STARTUP_HOLD_MAX:
+                break
+        yield from held
+        yield from payloads
 
     def _check_scrambled(self, parser: Any) -> None:
         """Tell the user when the device is scrambling the stream (#41).
@@ -1799,6 +1862,7 @@ class Hp7StreamRelay:
         self._q_resync = set()
         self._decrypt_buf = bytearray()
         self._irap_only_crypt = None
+        self._decrypt_undecided = []
         self._nalu_header_size = 2
         self._slice_evidence = [0, 0]
         self._warned_saturation = False
@@ -1810,7 +1874,9 @@ class Hp7StreamRelay:
         # tens of thousands of lines (#44, 20 GB session).
         next_v_log = next_a_log = time.monotonic() + PROGRESS_LOG_SEC
         try:
-            for body in self._shared_vtm.iter_payloads():
+            for body in self._hold_until_scrambling_known(
+                self._shared_vtm.iter_payloads()
+            ):
                 if self._shared_stop.is_set():
                     break
                 if not body:
