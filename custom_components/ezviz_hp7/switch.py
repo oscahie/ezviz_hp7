@@ -198,15 +198,7 @@ class _BaseHp7Switch(_OptimisticStateMixin, CoordinatorEntity, SwitchEntity):
 
 
 class EzvizHp7DndSwitch(_BaseHp7Switch):
-    """Alarm notifications (the cloud's ``nodisturb`` setting, ``alarmEnable``).
-
-    Despite the endpoint's name, ON means alarms are ENABLED. Checked on an
-    HP7 Pro (23 Nov 2026): with it on the door station beeps on unlock and
-    the cloud pushes unlocks and detections; switched off, the beep stops and
-    no alarm pushes arrive (doorbell calls still do). The entity was named
-    "Do Not Disturb", which read backwards; the translation key stays "dnd"
-    so the unique_id and entity_id don't change.
-    """
+    """Do-Not-Disturb."""
 
     def __init__(self, coordinator, api, serial: str, model: str) -> None:
         super().__init__(coordinator, api, serial, model, "dnd", "dnd_on")
