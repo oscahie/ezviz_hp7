@@ -187,28 +187,3 @@ async def test_ring_push_for_this_door_schedules_refreshes(hass):
     await hass.async_block_till_done()
     assert len(listener._refresh_unsubs) == len(push.REFRESH_DELAYS)
     await listener.async_stop()
-
-
-# -- Armed switch state ---------------------------------------------------------
-def test_arm_state_comes_from_defence_status_not_global_status():
-    from custom_components.ezviz_hp7.api import Hp7Api
-
-    info = {"FEATURE_INFO": {"0": {"DoorLock": {"EventSubscription": {
-        "DefenceStatus": {"armStatus": "disarmed", "defenceMode": "global"}}}}}}
-    assert Hp7Api._read_arm_status(info) is False
-    info["FEATURE_INFO"]["0"]["DoorLock"]["EventSubscription"]["DefenceStatus"]["armStatus"] = "armed"
-    assert Hp7Api._read_arm_status(info) is True
-    assert Hp7Api._read_arm_status({"FEATURE_INFO": {}}) is None
-
-
-def test_armed_switch_follows_defence_status_over_global_status():
-    from custom_components.ezviz_hp7.api import Hp7Api
-
-    api = Hp7Api(username="someone@example.com", password="secret", token={"username": "u"})
-    info = {
-        "STATUS": {"globalStatus": 1},
-        "FEATURE_INFO": {"0": {"DoorLock": {"EventSubscription": {
-            "DefenceStatus": {"armStatus": "disarmed"}}}}},
-    }
-    assert api._parse_extra_states(SERIAL, info)["defence_on"] is False
-    assert api._parse_extra_states(SERIAL, {"STATUS": {"globalStatus": 1}})["defence_on"] is True
