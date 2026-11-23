@@ -1140,6 +1140,30 @@ class Hp7Api:
         return result[0] if result else None
 
     @staticmethod
+    def _read_arm_status(info: dict[str, Any]) -> bool | None:
+        """Read the real arm state from FEATURE_INFO ... DefenceStatus.
+
+        On the HP7 Pro, ``STATUS.globalStatus`` stayed 1 while the door station
+        was disarmed (``DefenceStatus.armStatus == "disarmed"``), so the Armed
+        switch showed on although no alarms (unlocks included) were sent.
+        Returns None when the device doesn't report it.
+        """
+        found: list[bool] = []
+
+        def _walk(obj: Any) -> None:
+            if isinstance(obj, dict):
+                for k, v in obj.items():
+                    if k == "DefenceStatus" and isinstance(v, dict):
+                        arm = str(v.get("armStatus") or "").lower()
+                        if arm in ("armed", "disarmed"):
+                            found.append(arm == "armed")
+                    else:
+                        _walk(v)
+
+        _walk(info.get("FEATURE_INFO"))
+        return found[0] if found else None
+
+    @staticmethod
     def _read_feature_states(info: dict[str, Any]) -> dict[str, Any]:
         """Extract read-only feature states from FEATURE_INFO (#34).
 
@@ -1422,6 +1446,9 @@ class Hp7Api:
             coerced = self._coerce_bool(global_status)
             if coerced is not None:
                 out["defence_on"] = coerced
+        armed = self._read_arm_status(info)
+        if armed is not None:
+            out["defence_on"] = armed
         return out
 
     def get_status(
