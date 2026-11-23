@@ -52,7 +52,7 @@ import socket
 import threading
 import time
 from contextlib import closing
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any, Iterable, Iterator, List, Optional
 
 from homeassistant.components.camera import Camera
 from homeassistant.config_entries import ConfigEntry
@@ -172,6 +172,107 @@ class Cpd7LanSource:
             self._client = None
 
 
+class NetSdkLanSource:
+    """VTM-shaped LAN source on the HCNetSDK command port (8000).
+
+    Logs in with the device's verification code and replays the EZVIZ app's
+    LAN preview sequence, so it needs nothing from the cloud: no CAS LAN key,
+    which EZVIZ only hands to the account that owns the device. The media
+    socket carries a 64-byte IMKH header followed by plain MPEG-PS, so
+    ``iter_payloads()`` yields the same bytes as the other sources and the
+    relay's usual pipeline (decryption included) applies unchanged.
+    """
+
+    # Hikvision numbers IP channels from 33; the HP7 / HP7 Pro door station
+    # video lives on the first one.
+    CHANNEL = 33
+    PORT = 8000
+
+    def __init__(self, api: "Hp7Api", serial: str, code: str) -> None:
+        self._api = api
+        self._serial = serial
+        self._code = code
+        self._stream: Any = None
+        self._sock: Any = None
+        self._closed = False
+
+    def start(self) -> "NetSdkLanSource":
+        """Log in and open the media socket (blocking — run in an executor)."""
+        from .pylocalapi.hcnetsdk import HcNetSdkLanEndpoint
+        from .pylocalapi.local_stream import (
+            hcnetsdk_command_port_native_lan_live_view_plan,
+            open_hcnetsdk_command_port_generated_multi_socket_stream,
+        )
+
+        if not self._code:
+            raise RuntimeError(
+                "no verification code configured for the port-8000 source"
+            )
+        local_ip = self._api.get_local_ip(self._serial)
+        if not local_ip:
+            raise RuntimeError(
+                f"could not resolve LAN IP for {self._serial} "
+                "(device not on this network?)"
+            )
+        stream = open_hcnetsdk_command_port_generated_multi_socket_stream(
+            HcNetSdkLanEndpoint(
+                serial=self._serial, host=local_ip, command_port=self.PORT
+            ),
+            hcnetsdk_command_port_native_lan_live_view_plan(channel=self.CHANNEL),
+            password=self._code,
+            timeout=10.0,
+            read_first_media=False,
+        )
+        try:
+            stream.start()
+        except Exception:
+            stream.close()
+            raise
+        self._stream = stream
+        self._sock = stream.media_socket
+        _LOGGER.info(
+            "Hp7StreamRelay: LAN source up (serial=%s ip=%s port=%d)",
+            self._serial, local_ip, self.PORT,
+        )
+        return self
+
+    @property
+    def streamssn(self) -> str:
+        return f"lan8000:{self._serial}"
+
+    def iter_payloads(self):
+        """Yield MPEG-PS bytes from the media socket, minus the IMKH header."""
+        synced = False
+        pending = b""
+        while not self._closed:
+            try:
+                data = self._sock.recv(65536)
+            except socket.timeout:
+                # A live doorbell never goes quiet for the socket timeout.
+                break
+            except OSError:
+                break
+            if not data:
+                break
+            if not synced:
+                pending += data
+                i = pending.find(b"\x00\x00\x01\xba")
+                if i < 0:
+                    pending = pending[-3:]
+                    continue
+                data, pending, synced = pending[i:], b"", True
+            yield data
+
+    def close(self) -> None:
+        self._closed = True
+        if self._stream is not None:
+            try:
+                self._stream.close()
+            except Exception:  # noqa: BLE001
+                pass
+            self._stream = None
+
+
 class _PreStartedSource:
     """Wrap an already-started source so a second ``start()`` is a no-op.
 
@@ -280,6 +381,11 @@ OUTPUT_STALL_TIMEOUT = 30.0
 # GOP exceeds this the cache is dropped for that GOP (new viewers fall back
 # to waiting for the next keyframe — the pre-cache behaviour).
 GOP_CACHE_MAX = 8 * 1024 * 1024
+# Most stream held back while deciding IRAP-only vs full encryption.
+DECRYPT_DECIDE_MAX = 4 * 1024 * 1024
+# Most stream held back at session start to see whether the first keyframe
+# is scrambled, when an encryption key is configured.
+STARTUP_HOLD_MAX = 2 * 1024 * 1024
 # Interval between relay progress log lines (#44).
 PROGRESS_LOG_SEC = 60.0
 # A subscriber queue saturated this long with nothing draining it has no live
@@ -677,6 +783,7 @@ class Hp7StreamRelay:
         stream_quality: str = "main",
         diagnostic_dumps: bool = False,
         encryption_key: str = "",
+        verification_code: str = "",
         hass: Any = None,
     ) -> None:
         self._hass = hass
@@ -689,8 +796,8 @@ class Hp7StreamRelay:
         # go2rtc must transcode (grey screen / dial refused on weak hosts).
         self._stream_mode = (stream_mode or "mjpeg").lower()
         self._warned_hevc_webrtc = False
-        # Stream source: "cloud" (VTM relay), "local" (CPD7 LAN), or "auto"
-        # (try LAN, fall back to cloud). LAN bypasses the cloud entirely and
+        # Stream source: "cloud" (VTM relay), "local" (CPD7 LAN), "local_sdk"
+        # (port-8000 LAN) or "auto" (try LAN, fall back to cloud). LAN bypasses the cloud entirely and
         # works on firmware whose VTM channel never pushes (#33/#36/#37).
         self._stream_source = (stream_source or "cloud").lower()
         # LAN encoder stream: "main" (full res) or "sub" (low-res, far
@@ -755,6 +862,10 @@ class Hp7StreamRelay:
         # a packet capture.
         self._diagnostic_dumps = bool(diagnostic_dumps)
         self._configured_key = (encryption_key or "").strip()
+        # Port-8000 login: the label's verification code, or the encryption
+        # key when no separate code is configured (the two are the same until
+        # the video encryption password is changed in the app).
+        self._login_code = (verification_code or "").strip() or self._configured_key
         # The decoder syncs encrypted streams on a keyframe (PSM), so ffmpeg
         # gets the codec parameters right away. A long probe there only
         # buffers video, and a slow host never catches up on that delay.
@@ -796,6 +907,8 @@ class Hp7StreamRelay:
         # 2 = HEVC (NAL header kept clear), 0 = H.264 (NAL header encrypted).
         self._nalu_header_size = 2
         self._slice_evidence = [0, 0]
+        # Decryptable chunks held while that is undecided.
+        self._decrypt_undecided: List[bytes] = []
         # GOP cache (#37): the stream since the last keyframe. A new viewer
         # can only start painting from an IDR, and some doorbells emit
         # keyframes tens of seconds apart — replaying this to each new
@@ -1145,13 +1258,30 @@ class Hp7StreamRelay:
                         "IRAP-only" if self._irap_only_crypt else "full",
                         seen_clear, seen, self._serial,
                     )
-            return decrypt_hikvision_ps_video(
-                chunk,
-                self._decrypt_key,
-                nalu_header_size=self._nalu_header_size,
-                encrypted_nal_types=(
-                    HEVC_IRAP_AND_PARAM_SET_NAL_TYPES if self._irap_only_crypt else None
-                ),
+                elif (
+                    self._nalu_header_size == 2
+                    and sum(map(len, self._decrypt_undecided)) < DECRYPT_DECIDE_MAX
+                ):
+                    # Decrypting the first keyframe's P slices in the wrong
+                    # mode corrupts the whole GOP, so the picture only
+                    # appears at the next keyframe (4 s on an HP7 Pro). Hold
+                    # them back until the mode is known (~12 frames).
+                    self._decrypt_undecided.append(chunk)
+                    return b""
+            chunks = self._decrypt_undecided + [chunk]
+            self._decrypt_undecided = []
+            return b"".join(
+                decrypt_hikvision_ps_video(
+                    c,
+                    self._decrypt_key,
+                    nalu_header_size=self._nalu_header_size,
+                    encrypted_nal_types=(
+                        HEVC_IRAP_AND_PARAM_SET_NAL_TYPES
+                        if self._irap_only_crypt
+                        else None
+                    ),
+                )
+                for c in chunks
             )
         except Exception as exc:  # noqa: BLE001
             self._decrypt_failed = True
@@ -1234,6 +1364,45 @@ class Hp7StreamRelay:
             )
         except Exception as exc:  # noqa: BLE001
             _LOGGER.debug("Hp7StreamRelay: could not raise OTP repair: %s", exc)
+
+    def _hold_until_scrambling_known(
+        self, payloads: Iterable[bytes]
+    ) -> Iterator[bytes]:
+        """Hold the first LAN payloads until it is known whether they are scrambled.
+
+        Scrambling is only noticed after several packets of the first
+        keyframe have gone by, and that keyframe is then undecodable, so the
+        picture waited for the next one (4 s on an HP7 Pro). With a key
+        configured, look first and decrypt from the start. Clear streams are
+        released once 256 KB past the first keyframe show no scrambling.
+        """
+        payloads = iter(payloads)
+        if not (
+            self._active_lan and self._configured_key and self._decrypt_key is None
+        ):
+            yield from payloads
+            return
+        probe = PesParser()
+        held: List[bytes] = []
+        size = 0
+        keyframe_at: Optional[int] = None
+        for body in payloads:
+            held.append(body)
+            size += len(body)
+            probe.feed(body)
+            if keyframe_at is None and _has_keyframe(body):
+                keyframe_at = size - len(body)
+            if probe.scrambled_packets >= 8:
+                self._check_scrambled(probe)
+                break
+            if (
+                keyframe_at is not None
+                and size - keyframe_at >= 256 * 1024
+                and probe.scrambled_packets == 0
+            ) or size >= STARTUP_HOLD_MAX:
+                break
+        yield from held
+        yield from payloads
 
     def _check_scrambled(self, parser: Any) -> None:
         """Tell the user when the device is scrambling the stream (#41).
@@ -1458,23 +1627,30 @@ class Hp7StreamRelay:
                 stream_quality=self._stream_quality,
             )
 
+        def _open_lan_sdk():
+            return NetSdkLanSource(self._api, self._serial, self._login_code)
+
         if self._stream_source == "cloud":
             return await loop.run_in_executor(None, _open_cloud)
         if self._stream_source == "local":
             return await loop.run_in_executor(None, _open_lan)
-        # auto: prefer LAN, fall back to cloud on any LAN failure.
-        try:
-            src = await loop.run_in_executor(None, _open_lan)
-            # Probe the LAN handshake now so a failure falls back to cloud
-            # before we commit the broadcast reader to it.
-            await loop.run_in_executor(None, src.start)
-            return _PreStartedSource(src)
-        except Exception as exc:  # noqa: BLE001
-            _LOGGER.info(
-                "Hp7StreamRelay: LAN source unavailable (%s) — falling back "
-                "to cloud VTM (serial=%s)", exc, self._serial,
-            )
-            return await loop.run_in_executor(None, _open_cloud)
+        if self._stream_source == "local_sdk":
+            return await loop.run_in_executor(None, _open_lan_sdk)
+        # auto: prefer LAN (CPD7, then port 8000 when a code is set), fall
+        # back to cloud. Each LAN source is started here so a failure falls
+        # through before we commit the broadcast reader to it.
+        lan_openers = [_open_lan] + ([_open_lan_sdk] if self._login_code else [])
+        for opener in lan_openers:
+            try:
+                src = await loop.run_in_executor(None, opener)
+                await loop.run_in_executor(None, src.start)
+                return _PreStartedSource(src)
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.info(
+                    "Hp7StreamRelay: LAN source unavailable (%s) — trying the "
+                    "next source (serial=%s)", exc, self._serial,
+                )
+        return await loop.run_in_executor(None, _open_cloud)
 
     async def prewarm(self) -> None:
         """Open (or extend) a shared VTM session that future HA Stream
@@ -1547,7 +1723,7 @@ class Hp7StreamRelay:
             )
             self._shared_vtm = vtm
             self._active_lan = isinstance(
-                vtm, (Cpd7LanSource, _PreStartedSource)
+                vtm, (Cpd7LanSource, NetSdkLanSource, _PreStartedSource)
             )
             self._shared_stop = threading.Event()
             self._shared_reader = threading.Thread(
@@ -1686,6 +1862,7 @@ class Hp7StreamRelay:
         self._q_resync = set()
         self._decrypt_buf = bytearray()
         self._irap_only_crypt = None
+        self._decrypt_undecided = []
         self._nalu_header_size = 2
         self._slice_evidence = [0, 0]
         self._warned_saturation = False
@@ -1697,7 +1874,9 @@ class Hp7StreamRelay:
         # tens of thousands of lines (#44, 20 GB session).
         next_v_log = next_a_log = time.monotonic() + PROGRESS_LOG_SEC
         try:
-            for body in self._shared_vtm.iter_payloads():
+            for body in self._hold_until_scrambling_known(
+                self._shared_vtm.iter_payloads()
+            ):
                 if self._shared_stop.is_set():
                     break
                 if not body:
@@ -2055,12 +2234,16 @@ class Hp7StreamRelay:
                     # the picture freezes while the separately re-encoded
                     # audio keeps playing. With +genpts alone the same
                     # capture yields a clean 66.667 ms spacing (15 fps).
-                    # Wallclock stays on the raw elementary inputs below and
-                    # on the cloud path, which genuinely have no timestamps.
+                    # Wallclock stays on the cloud path's raw elementary
+                    # inputs, which genuinely have no timestamps.
                     "-f", "mpeg",
                     "-i", f"tcp://127.0.0.1:{raw_port}",
+                    # No wallclock here either: arrival-time stamps on the
+                    # audio made the muxer drop 3-5 video frames every ~8 s
+                    # and sent audio timestamps backwards (WebRTC mode, HP7
+                    # Pro). Without it ffmpeg counts samples (1024 per AAC
+                    # frame), which follows the device clock like the video.
                     "-analyzeduration", "200000", "-probesize", "200000",
-                    *wallclock,
                     "-f", "aac",
                     "-i", f"tcp://127.0.0.1:{a_port}",
                     # Video from the raw MPEG-PS input (its mislabelled MP2
@@ -2480,6 +2663,7 @@ async def async_setup_live_entities(
         stream_quality=str(data.get("stream_quality") or "main"),
         diagnostic_dumps=bool(data.get("diagnostic_dumps", False)),
         encryption_key=str(data.get("encryption_key") or ""),
+        verification_code=str(data.get("verification_code") or ""),
         hass=hass,
     )
     await relay.start()

@@ -28,6 +28,7 @@ from .const import (
     STREAM_MODES,
     CONF_DIAGNOSTIC_DUMPS,
     CONF_ENCRYPTION_KEY,
+    CONF_VERIFICATION_CODE,
     CONF_STREAM_QUALITY,
     STREAM_QUALITY_MAIN,
     STREAM_QUALITIES,
@@ -142,6 +143,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         or ""
     ).strip()
+    verification_code = str(
+        entry.options.get(
+            CONF_VERIFICATION_CODE, entry.data.get(CONF_VERIFICATION_CODE, "")
+        )
+        or ""
+    ).strip()
     diagnostic_dumps = bool(
         entry.options.get(
             CONF_DIAGNOSTIC_DUMPS,
@@ -195,6 +202,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "stream_quality": stream_quality,
         "diagnostic_dumps": diagnostic_dumps,
         "encryption_key": encryption_key,
+        "verification_code": verification_code,
         "coordinator": coordinator,
     }
 
