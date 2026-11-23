@@ -62,11 +62,11 @@ Remove unused devices to free at least one slot.
   - 🔔 `chime_sound_monitor` — chime on each configured indoor monitor (multi-monitor friendly — HP7 bifamigliare)
   - 🛎️ `chime_pir` / `chime_pir_monitor` — motion sound notification on / off
   - 💡 `label_light` — the LED that illuminates the name-tag plate. On HPD7 this is the IoT `LightCtrl/NightLightEnable` property (read **and** write confirmed on hardware); older HP7 firmware uses switch type 611
-  - 🌙 `dnd` — *(beta)* Do-Not-Disturb mode
+  - 🌙 `dnd` — *(beta)* Do-Not-Disturb. Set per EZVIZ **account**, not per device: on = this account gets no alarm pushes (`NODISTURB.alarmEnable`)
   - 🕶️ `privacy` — *(beta)* privacy / camera blackout
-  - 🛡️ `defence` — *(beta)* armed / disarmed motion detection
+  - 🛡️ `defence` — *(beta)* armed / disarmed (`STATUS.globalStatus`, written with `changeDefenceStatusReq`, as the app does)
 - **Number sliders**
-  - 🔊 `chime_volume` / `chime_volume_monitor` — chime volume 0–7
+  - 🔊 `chime_volume` / `chime_volume_monitor` — chime volume. Door station 0–100, same scale as the EZVIZ app (on the HP7 Pro door station this is also the voice / unlock-beep volume); indoor monitor 0–7
   - 🎵 `chime_ringtone` / `chime_ringtone_monitor` — *(beta)* ringtone selector 0–15 for the doorbell press
   - 🎵 `chime_pir_ringtone` / `chime_pir_ringtone_monitor` — *(beta)* ringtone selector 0–15 for motion events
 - **Sensors**

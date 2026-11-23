@@ -64,7 +64,7 @@ Rimuovi i dispositivi inutilizzati per liberare almeno uno slot.
   - 🕶️ `privacy` — *(beta)* privacy / oscuramento telecamera
   - 🛡️ `defence` — *(beta)* rilevamento movimento armato / disarmato
 - **Cursori numerici**
-  - 🔊 `chime_volume` / `chime_volume_monitor` — volume suoneria 0–7
+  - 🔊 `chime_volume` / `chime_volume_monitor` — volume suoneria (campanello 0–100, monitor 0–7)
   - 🎵 `chime_ringtone` / `chime_ringtone_monitor` — *(beta)* selettore suoneria 0–15 per la pressione del campanello
   - 🎵 `chime_pir_ringtone` / `chime_pir_ringtone_monitor` — *(beta)* selettore suoneria 0–15 per gli eventi di movimento
 - **Sensori**

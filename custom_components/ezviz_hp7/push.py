@@ -228,7 +228,7 @@ class Hp7PushListener:
         serial = ext.get("device_serial") if isinstance(ext, dict) else None
         if serial not in self._serials:
             _LOGGER.debug(
-                "EZVIZ push (%s) for another device (%s), ignored", self._mode, serial
+                "EZVIZ push (%s) for another entry (%s), ignored", self._mode, serial
             )
             return
         _LOGGER.debug(
