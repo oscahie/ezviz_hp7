@@ -6,8 +6,9 @@ long link registered at login with ``pushRegisterJson=[{"channel":99}]`` and
 reached through the LBS host the cloud names in ``pushDasDomain``. Verified on
 an HP7 Pro (22 Nov 2026): the same link carries calls (``pushType`` 2,
 ``soundType`` 2701, ``ext.calling_id``), unlocks (``alert_type_code`` 10242,
-``ext.customerType`` "Card" / "<name> (F)") and smart detections (10079), ~3-5 s
-after the event. Accounts with alarm do-not-disturb on only get the calls.
+``ext.customerType`` "Card" / "<name> (F)") and smart detections (10079),
+practically at once (``ext.time`` is the door station's clock, a few seconds
+behind). Accounts with alarm do-not-disturb on only get the calls.
 
 Channel 99 needs its own login with the Android app profile, so this keeps a
 separate HTTP session (and feature code) from the integration's main client;
