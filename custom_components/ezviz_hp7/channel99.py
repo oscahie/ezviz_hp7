@@ -63,6 +63,64 @@ class Channel99Error(Exception):
     """Login or registration failed; the caller should fall back."""
 
 
+# Field order of the comma-separated ``ext`` the app decodes (pyEzvizApi
+# ``push/notifications.py``, Apache-2.0): type "1" alarms, type "14" calls.
+# Live channel-99 pushes carry ext this way, not as a JSON object.
+_ALARM_FIELDS = (
+    "channel_type", "time", "device_serial", "channel_no", "alert_type_code",
+    "default_pic_url", "media_url_alt1", "media_url_alt2", "resource_type",
+    "status_flag", "file_id", "is_encrypted", "picChecksum", "is_dev_video",
+    "metadata", "msgId", "image", "device_name", "reserved", "sequence_number",
+)
+_CALL_FIELDS = (
+    "channel_type", "time", "device_serial", "channel_no", "calling_type",
+    "calling_id", "calling_status", "image", "is_encrypted", "picChecksum",
+    "analysis_type", "analysis_result", "reserved", "alarm_name",
+    "reserved_alt", "custom_info",
+)
+_INT_FIELDS = frozenset({
+    "channel_type", "channel_no", "alert_type_code", "status_flag",
+    "is_encrypted", "is_dev_video", "sequence_number", "calling_type",
+    "calling_status", "analysis_type",
+})
+
+
+def _fields(parts: list[str], names: tuple[str, ...]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for index, name in enumerate(names):
+        value: Any = parts[index] if index < len(parts) else None
+        if value is not None and name in _INT_FIELDS:
+            try:
+                value = int(value)
+            except ValueError:
+                pass
+        out[name] = value
+    return out
+
+
+def decode_ext(value: str) -> Any:
+    """A push's string ``ext``: JSON object, or the app's CSV alarm/call form."""
+    if value.lstrip().startswith("{"):
+        try:
+            return json.loads(value)
+        except ValueError:
+            return value
+    parts = value.split(",")
+    if parts[0] == "1":
+        out = _fields(parts, _ALARM_FIELDS)
+        if len(parts) > 8:
+            out["customerType"] = parts[8]
+        if len(parts) > 19:
+            out["subType"] = out["sequence_number"]
+        return out
+    if parts[0] == "14":
+        out = _fields(parts, _CALL_FIELDS)
+        if isinstance(out["time"], str):
+            out["time"] = out["time"].replace("+", " ")
+        return out
+    return {"channel_type": parts[0], "raw_fields": parts[1:]}
+
+
 def feature_code(account: str) -> str:
     """Per-account terminal id, distinct from the main client's."""
     return hashlib.md5(f"ezviz_hp7:channel99:{account}".encode()).hexdigest()
@@ -203,15 +261,19 @@ class Channel99Push:
         try:
             message = json.loads(payload)
         except ValueError:
+            _LOGGER.debug("EZVIZ channel-99: undecodable push %r", payload[:200])
             return
         if not isinstance(message, dict):
             return
         ext = message.get("ext")
         if isinstance(ext, str):
-            try:
-                message["ext"] = json.loads(ext)
-            except ValueError:
-                pass
+            message["ext"] = decode_ext(ext)
+        ext = message.get("ext")
+        _LOGGER.debug(
+            "EZVIZ channel-99 push received: pushType %s, soundType %s, serial %s",
+            message.get("pushType"), message.get("soundType"),
+            ext.get("device_serial") if isinstance(ext, dict) else None,
+        )
         try:
             self._on_message(message)
         except Exception:  # noqa: BLE001

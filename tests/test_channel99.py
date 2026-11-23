@@ -1,6 +1,7 @@
 """Channel-99 push: app-profile login, message decoding, and fallback to the legacy push."""
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -82,6 +83,33 @@ def test_receive_decodes_json_and_a_string_ext():
     c._receive(b"not json")
     c._receive(b"[1, 2]")
     assert [m.args[0]["ext"]["device_serial"] for m in on_message.call_args_list] == ["X", "Y"]
+
+
+def test_receive_decodes_the_csv_ext_of_live_pushes():
+    """Live channel-99 pushes carry ext as the app's comma-separated form."""
+    on_message = MagicMock()
+    c = _client([], on_message=on_message)
+    call = "14,2026-11-23+21:30:45,%s,1,0,20261123213045910-BK0-0-00032,1,,0,,0,,,%s,," % (
+        SERIAL, SERIAL)
+    unlock = "1,2026-11-23 21:25:32,%s,1,10242,,,,Oscar (F),0,f,1,,0,,m,,d,,2401" % SERIAL
+    c._receive(json.dumps({"pushType": 2, "soundType": 2701, "ext": call}).encode())
+    c._receive(json.dumps({"pushType": 1, "ext": unlock}).encode())
+    first, second = (m.args[0]["ext"] for m in on_message.call_args_list)
+    assert first["device_serial"] == SERIAL
+    assert first["calling_status"] == 1 and first["time"] == "2026-11-23 21:30:45"
+    assert second["device_serial"] == SERIAL
+    assert second["alert_type_code"] == 10242 and second["customerType"] == "Oscar (F)"
+    assert second["subType"] == 2401
+
+
+async def test_csv_ext_push_reaches_the_listener(hass):
+    listener = push.Hp7PushListener(hass, MagicMock(), _coordinator())
+    listener._on_message(
+        {"pushType": 2, "ext": channel99.decode_ext(f"14,t,{SERIAL},1,0,id,1")}
+    )
+    await hass.async_block_till_done()
+    assert len(listener._refresh_unsubs) == len(push.REFRESH_DELAYS)
+    await listener.async_stop()
 
 
 def test_saved_keys_are_wrapped_with_the_user_id():
