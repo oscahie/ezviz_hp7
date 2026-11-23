@@ -192,6 +192,33 @@ class Hp7Api:
             _LOGGER.warning("EZVIZ HP7: forced re-login failed: %s", exc)
             return False
 
+    def start_channel99(
+        self,
+        state: dict[str, Any],
+        save_state: Any,
+        on_message: Any,
+    ) -> Any:
+        """Start the channel-99 long link (calls + alarms) and return it.
+
+        Uses its own Android-profile login with the stored password, so the
+        main session is untouched. Raises ``Channel99Error`` (or a network
+        error) when the account can't use it. Blocking; run in an executor.
+        """
+        from .channel99 import Channel99Error, Channel99Push
+
+        if not self._username or not self._password:
+            raise Channel99Error("no stored password for the app-profile login")
+        host = (self._token or {}).get("api_url") or self._url
+        push = Channel99Push(
+            self._username, self._password, host, state, save_state, on_message
+        )
+        try:
+            push.start()
+        except Exception:
+            push.stop()
+            raise
+        return push
+
     def start_push(self, on_message: Any) -> Any:
         """Connect to the EZVIZ push (MQTT) service and return the client.
 
