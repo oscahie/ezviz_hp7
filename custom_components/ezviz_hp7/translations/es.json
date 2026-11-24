@@ -299,7 +299,7 @@
               "stream_source": "De dónde saca Home Assistant el vídeo en directo.",
               "verification_code": "Las 6 letras de la etiqueta del dispositivo. Puede ser necesario para iniciar sesión y/o para descifrar el vídeo, según el modo.",
               "encryption_key": "Solo si cambiaste la contraseña de cifrado de vídeo en la app EZVIZ. Si no, déjalo vacío.",
-              "stream_quality": "Solo la usa la fuente 'Local, LAN'. 'Local, puerto 8000' crea siempre las dos cámaras y la nube siempre da resolución completa.",
+              "stream_quality": "Solo aplica a la reproducción local por los puertos 9010/9020. El puerto 8000 crea siempre las dos cámaras. La nube siempre da la resolución completa.",
               "stream_mode": "Cómo llega el vídeo al navegador.",
               "video_codec": "Qué hace el relay con el vídeo antes de entregarlo."
             }

@@ -259,7 +259,7 @@
               "stream_source": "Skąd Home Assistant pobiera obraz na żywo.",
               "verification_code": "6 liter z etykiety urządzenia. Może być potrzebny do logowania i/lub odszyfrowania wideo, zależnie od trybu.",
               "encryption_key": "Tylko jeśli zmieniono hasło szyfrowania wideo w aplikacji EZVIZ. W przeciwnym razie pozostaw puste.",
-              "stream_quality": "Używana tylko przez źródło 'Lokalnie, LAN'. 'Lokalnie, port 8000' zawsze tworzy obie kamery, a chmura zawsze podaje pełną rozdzielczość.",
+              "stream_quality": "Dotyczy tylko odtwarzania lokalnego przez porty 9010/9020. Port 8000 zawsze tworzy obie kamery. Chmura zawsze podaje pełną rozdzielczość.",
               "stream_mode": "Jak obraz trafia do przeglądarki.",
               "video_codec": "Co przekaźnik robi z obrazem przed przekazaniem dalej."
             }
