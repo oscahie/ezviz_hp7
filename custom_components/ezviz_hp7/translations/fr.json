@@ -237,23 +237,50 @@
     "step": {
       "init": {
         "title": "Options EZVIZ HP7 / CP7",
-        "description": "Saisissez le numéro de série du moniteur intérieur (ou plusieurs séparés par virgules pour HP7 bi-famille) pour exposer un interrupteur par moniteur. Vide = aucun moniteur.",
+        "description": "Réglages de ce portier. Chaque option est expliquée en dessous ; la section avancée peut généralement rester telle quelle.",
         "data": {
-          "monitor_serial": "Numéro de série du moniteur intérieur",
-          "relay_port": "Port TCP fixe du relai (0 = aléatoire, recommandé 8554 pour go2rtc / mediamtx)",
-          "relay_bind": "Hôte d'écoute du relai (127.0.0.1 = local uniquement, défaut sûr ; 0.0.0.0 expose le flux brut NON authentifié aux autres hôtes, p.ex. Frigate — réseaux de confiance uniquement, port fixe requis)",
-          "aggressive_mpegts": "Compatibilité MPEG-TS agressive (activez si vous voyez 'Immediate exit requested' dans les logs ; sûr de laisser OFF par défaut)",
-          "video_codec": "Codec vidéo (auto = détection ; hevc transcode le H.265 en H.264 pour WebRTC ; hevc_copy laisse passer le H.265 tel quel pour hôtes peu puissants / Frigate / Safari)",
-          "stream_source": "Source du flux (cloud = relais VTM EZVIZ ; local = LAN directe, contourne le cloud et corrige 'pas de direct' sur les firmwares qui n'émettent pas vers le cloud — nécessite HA sur le même réseau que le portier ; local_sdk = LAN directe sur le port 8000, se connecte avec le code de vérification ci-dessous ; fonctionne avec les comptes avec lesquels le portier est seulement partagé ; ajoute toujours une seconde caméra en direct basse résolution à côté de celle en pleine résolution ; auto = essaie local puis cloud)",
-          "stream_mode": "Mode de diffusion (auto = par défaut : détecte le codec et choisit tout seul — H.264 → webrtc, HEVC → mjpeg ; webrtc = HA Stream/go2rtc, avec audio + faible latence mais n'affiche pas le HEVC sans transcodage ; mjpeg = ffmpeg par spectateur en motion-JPEG, agnostique au codec et robuste pour HEVC/multi-spectateur mais sans audio)",
-          "stream_quality": "Qualité du flux LAN, source « local » uniquement (main = pleine résolution ; sub = flux secondaire basse résolution de l'appareil, bien moins coûteux à décoder — à utiliser si la vidéo accumule du retard sur un hôte peu puissant comme un Raspberry Pi). Ignorée par les autres sources : « local_sdk » propose toujours les deux, sous forme de deux caméras (désactivez celle en pleine résolution si votre hôte ne suit pas) ; « cloud » sert toujours la pleine résolution",
-          "verification_code": "Code de vérification",
-          "encryption_key": "Mot de passe de chiffrement vidéo",
-          "diagnostic_dumps": "Vidages de diagnostic (écrit deux fichiers .bin dans /config capturant le début du flux, pour analyse lors d'un signalement de problème vidéo. Laissez sur OFF : inutile en usage normal)"
+          "monitor_serial": "Numéro de série du moniteur intérieur"
         },
         "data_description": {
-          "verification_code": "Les 6 lettres de l'étiquette de l'appareil. Sert à se connecter avec la source 'local_sdk' et à déchiffrer la vidéo tant que le chiffrement utilise le code de l'étiquette.",
-          "encryption_key": "Uniquement si vous avez changé le mot de passe de chiffrement vidéo dans l'app EZVIZ. Sinon, laissez vide."
+          "monitor_serial": "Uniquement pour les kits HP7 avec moniteur intérieur : son numéro (ou plusieurs, séparés par des virgules, pour le HP7 bi-famille) ajoute un interrupteur par moniteur. Sinon, laissez vide."
+        },
+        "sections": {
+          "video": {
+            "name": "Vidéo en direct",
+            "description": "D'où vient le direct et comment il arrive au navigateur.",
+            "data": {
+              "stream_source": "Source du flux",
+              "verification_code": "Code de vérification",
+              "encryption_key": "Mot de passe de chiffrement vidéo",
+              "stream_quality": "Qualité du flux LAN",
+              "stream_mode": "Mode de diffusion",
+              "video_codec": "Codec vidéo"
+            },
+            "data_description": {
+              "stream_source": "D'où Home Assistant récupère la vidéo en direct.",
+              "verification_code": "Les 6 lettres de l'étiquette de l'appareil. Sert à se connecter avec la source « Local, port 8000 » et à déchiffrer la vidéo tant que le chiffrement utilise le code de l'étiquette.",
+              "encryption_key": "Uniquement si vous avez changé le mot de passe de chiffrement vidéo dans l'app EZVIZ. Sinon, laissez vide.",
+              "stream_quality": "Utilisée uniquement par la source « Local, LAN ». « Local, port 8000 » crée toujours les deux caméras et le cloud sert toujours la pleine résolution.",
+              "stream_mode": "Comment la vidéo arrive au navigateur.",
+              "video_codec": "Ce que fait le relais avec la vidéo avant de la transmettre."
+            }
+          },
+          "advanced": {
+            "name": "Avancé",
+            "description": "Réglages du relais et de diagnostic. Laissez-les tels quels sauf besoin.",
+            "data": {
+              "relay_port": "Port TCP du relais",
+              "relay_bind": "Adresse d'écoute du relais",
+              "aggressive_mpegts": "Compatibilité MPEG-TS agressive",
+              "diagnostic_dumps": "Vidages de diagnostic"
+            },
+            "data_description": {
+              "relay_port": "0 = aléatoire. Utilisez un port fixe (p. ex. 8554) pour lire le flux depuis go2rtc, mediamtx ou Frigate.",
+              "relay_bind": "127.0.0.1 = cet hôte uniquement (sûr). 0.0.0.0 expose le flux brut, SANS authentification, aux autres hôtes comme Frigate : réseaux de confiance uniquement, port fixe requis.",
+              "aggressive_mpegts": "À activer seulement si les logs affichent 'Immediate exit requested'.",
+              "diagnostic_dumps": "Écrit deux fichiers .bin dans /config avec le début du flux, pour signaler un problème vidéo. Laissez désactivé en usage normal."
+            }
+          }
         }
       }
     }
@@ -302,6 +329,37 @@
     },
     "hang_up_failed": {
       "message": "Impossible de raccrocher l'appel de la sonnette. Vérifiez la connexion au cloud EZVIZ ; le journal de Home Assistant indique la raison."
+    }
+  },
+  "selector": {
+    "stream_source": {
+      "options": {
+        "cloud": "Cloud : relais EZVIZ. Fonctionne partout, nécessite Internet",
+        "local": "Local, LAN : direct sur votre réseau, sans cloud. Corrige « pas de direct » sur les firmwares qui n'émettent pas vers le cloud ; nécessite la clé LAN du cloud (compte principal)",
+        "local_sdk": "Local, port 8000 : direct sur votre réseau avec le code de vérification. Fonctionne avec les comptes partagés ; ajoute aussi une caméra basse résolution",
+        "auto": "Auto : essaie le local d'abord, puis le cloud"
+      }
+    },
+    "stream_quality": {
+      "options": {
+        "main": "Principal : pleine résolution",
+        "sub": "Secondaire : flux basse résolution, bien plus léger à décoder. À utiliser si la vidéo prend du retard sur un hôte peu puissant (p. ex. Raspberry Pi)"
+      }
+    },
+    "stream_mode": {
+      "options": {
+        "auto": "Auto (recommandé) : choisit selon le codec, H.264 → WebRTC, HEVC → MJPEG",
+        "webrtc": "WebRTC : HA Stream/go2rtc, avec audio et faible latence ; n'affiche pas le HEVC sans transcodage",
+        "mjpeg": "MJPEG : un ffmpeg par spectateur, fonctionne avec tout codec et plusieurs spectateurs, sans audio"
+      }
+    },
+    "video_codec": {
+      "options": {
+        "auto": "Auto (recommandé) : détecte le codec",
+        "h264": "H.264 : le portier envoie du H.264, pas de détection",
+        "hevc": "HEVC → H.264 : transcode le H.265 pour que les navigateurs l'affichent en WebRTC (utilise le CPU)",
+        "hevc_copy": "HEVC tel quel : laisse passer le H.265 intact, pour hôtes peu puissants, Frigate ou Safari"
+      }
     }
   }
 }

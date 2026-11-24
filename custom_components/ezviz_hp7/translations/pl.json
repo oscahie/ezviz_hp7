@@ -237,23 +237,50 @@
     "step": {
       "init": {
         "title": "Opcje EZVIZ HP7 / CP7",
-        "description": "Wprowadź numer seryjny monitora wewnętrznego (lub kilka numerów oddzielonych przecinkami dla konfiguracji dwurodzinnej HP7), aby udostępnić dedykowany przełącznik dla każdego monitora. Puste pole = brak monitora.",
+        "description": "Ustawienia tego wideodomofonu. Każda opcja jest wyjaśniona pod nią; sekcję zaawansowaną zwykle można zostawić bez zmian.",
         "data": {
-          "monitor_serial": "Numer seryjny monitora wewnętrznego",
-          "relay_port": "Stały port TCP dla przekazu na żywo (0 = losowy, sugerowany 8554 dla go2rtc / mediamtx)",
-          "relay_bind": "Host nasłuchu przekaźnika (127.0.0.1 = tylko lokalnie, bezpieczny domyślny; 0.0.0.0 udostępnia NIEUWIERZYTELNIONY surowy strumień innym hostom, np. Frigate — tylko zaufane sieci, wymaga stałego portu)",
-          "aggressive_mpegts": "Agresywna kompatybilność MPEG-TS (włącz, jeśli widzisz w logach 'Immediate exit requested'; można bezpiecznie zostawić WYŁĄCZONE domyślnie)",
-          "video_codec": "Kodek wideo (auto = wykrywanie; hevc transcodes H.265 na H.264 dla WebRTC; hevc_copy przesyła H.265 bez zmian dla słabszych hostów / Frigate / Safari)",
-          "stream_source": "Źródło strumienia (cloud = przekaźnik VTM EZVIZ; local = bezpośrednia sieć LAN, omija chmurę i naprawia błąd 'brak podglądu na żywo' na oprogramowaniu, które nie wysyła obrazu do chmury — wymaga HA w tej samej sieci co wideodomofon; local_sdk = bezpośrednia sieć LAN przez port 8000, loguje się kodem weryfikacyjnym poniżej; działa na kontach, którym wideodomofon jest tylko udostępniony; zawsze dodaje drugą kamerę na żywo w niskiej rozdzielczości obok tej w pełnej rozdzielczości; auto = najpierw spróbuj LAN, potem chmurę)",
-          "stream_mode": "Dostarczanie widoku na żywo (auto = domyślnie: wykrywa kodek i dobiera odpowiedni — H.264 → webrtc, HEVC → mjpeg; webrtc = HA Stream/go2rtc, obsługuje dźwięk i ma niskie opóźnienie, ale nie wyświetli HEVC bez transkodowania; mjpeg = ffmpeg per widz do motion-JPEG, niezależny od kodeka i odporny na HEVC/wielu widzów, ale bez dźwięku)",
-          "stream_quality": "Jakość strumienia LAN, tylko dla źródła 'local' (main = pełna rozdzielczość; sub = strumień o niskiej rozdzielczości z urządzenia, znacznie tańszy w dekodowaniu — użyj go, jeśli wideo gromadzi opóźnienie na słabym hoście, takim jak Raspberry Pi). Inne źródła ją ignorują: 'local_sdk' zawsze oferuje oba, jako dwie kamery (wyłącz tę w pełnej rozdzielczości, jeśli host sobie nie radzi); 'cloud' zawsze podaje pełną rozdzielczość",
-          "verification_code": "Kod weryfikacyjny",
-          "encryption_key": "Hasło szyfrowania wideo",
-          "diagnostic_dumps": "Zrzuty diagnostyczne (zapisuje dwa pliki .bin w /config z początkiem strumienia, wyłącznie do analizy przy zgłaszaniu problemu z obrazem. Zostaw WYŁĄCZONE: niepotrzebne przy normalnym użyciu)"
+          "monitor_serial": "Numer seryjny monitora wewnętrznego"
         },
         "data_description": {
-          "verification_code": "6 liter z etykiety urządzenia. Służy do logowania w źródle 'local_sdk' i do odszyfrowania wideo, dopóki szyfrowanie używa kodu z etykiety.",
-          "encryption_key": "Tylko jeśli zmieniono hasło szyfrowania wideo w aplikacji EZVIZ. W przeciwnym razie pozostaw puste."
+          "monitor_serial": "Tylko dla zestawów HP7 z monitorem wewnętrznym: jego numer (lub kilka, oddzielonych przecinkami, dla wersji dwurodzinnej) dodaje przełącznik dla każdego monitora. W przeciwnym razie pozostaw puste."
+        },
+        "sections": {
+          "video": {
+            "name": "Obraz na żywo",
+            "description": "Skąd pochodzi podgląd na żywo i jak trafia do przeglądarki.",
+            "data": {
+              "stream_source": "Źródło strumienia",
+              "verification_code": "Kod weryfikacyjny",
+              "encryption_key": "Hasło szyfrowania wideo",
+              "stream_quality": "Jakość strumienia LAN",
+              "stream_mode": "Dostarczanie podglądu",
+              "video_codec": "Kodek wideo"
+            },
+            "data_description": {
+              "stream_source": "Skąd Home Assistant pobiera obraz na żywo.",
+              "verification_code": "6 liter z etykiety urządzenia. Służy do logowania w źródle 'Lokalnie, port 8000' i do odszyfrowania wideo, dopóki szyfrowanie używa kodu z etykiety.",
+              "encryption_key": "Tylko jeśli zmieniono hasło szyfrowania wideo w aplikacji EZVIZ. W przeciwnym razie pozostaw puste.",
+              "stream_quality": "Używana tylko przez źródło 'Lokalnie, LAN'. 'Lokalnie, port 8000' zawsze tworzy obie kamery, a chmura zawsze podaje pełną rozdzielczość.",
+              "stream_mode": "Jak obraz trafia do przeglądarki.",
+              "video_codec": "Co przekaźnik robi z obrazem przed przekazaniem dalej."
+            }
+          },
+          "advanced": {
+            "name": "Zaawansowane",
+            "description": "Ustawienia przekaźnika i diagnostyki. Zostaw bez zmian, jeśli ich nie potrzebujesz.",
+            "data": {
+              "relay_port": "Port TCP przekaźnika",
+              "relay_bind": "Adres nasłuchu przekaźnika",
+              "aggressive_mpegts": "Agresywna kompatybilność MPEG-TS",
+              "diagnostic_dumps": "Zrzuty diagnostyczne"
+            },
+            "data_description": {
+              "relay_port": "0 = losowy. Użyj stałego portu (np. 8554), aby odczytać strumień z go2rtc, mediamtx lub Frigate.",
+              "relay_bind": "127.0.0.1 = tylko ten host (bezpieczne). 0.0.0.0 udostępnia surowy strumień BEZ uwierzytelniania innym hostom, np. Frigate: tylko zaufane sieci, wymaga stałego portu.",
+              "aggressive_mpegts": "Włącz tylko, jeśli w logach widać 'Immediate exit requested'.",
+              "diagnostic_dumps": "Zapisuje dwa pliki .bin w /config z początkiem strumienia, do zgłaszania problemu z obrazem. Przy normalnym użyciu zostaw wyłączone."
+            }
+          }
         }
       }
     }
@@ -302,6 +329,37 @@
     },
     "hang_up_failed": {
       "message": "Nie udało się rozłączyć połączenia z dzwonka. Sprawdź połączenie z chmurą EZVIZ; dziennik Home Assistant podaje przyczynę."
+    }
+  },
+  "selector": {
+    "stream_source": {
+      "options": {
+        "cloud": "Chmura: przekaźnik EZVIZ. Działa wszędzie, wymaga internetu",
+        "local": "Lokalnie, LAN: bezpośrednio w Twojej sieci, bez chmury. Naprawia 'brak podglądu' na oprogramowaniu, które nie wysyła do chmury; wymaga klucza LAN z chmury (konto główne)",
+        "local_sdk": "Lokalnie, port 8000: bezpośrednio w Twojej sieci z kodem weryfikacyjnym. Działa na kontach udostępnionych; dodaje też kamerę w niskiej rozdzielczości",
+        "auto": "Auto: najpierw lokalnie, potem chmura"
+      }
+    },
+    "stream_quality": {
+      "options": {
+        "main": "Główny: pełna rozdzielczość",
+        "sub": "Pomocniczy: strumień w niskiej rozdzielczości, znacznie lżejszy w dekodowaniu. Użyj, jeśli obraz się opóźnia na słabym hoście (np. Raspberry Pi)"
+      }
+    },
+    "stream_mode": {
+      "options": {
+        "auto": "Auto (zalecane): wybiera wg kodeka, H.264 → WebRTC, HEVC → MJPEG",
+        "webrtc": "WebRTC: HA Stream/go2rtc, z dźwiękiem i niskim opóźnieniem; nie pokaże HEVC bez transkodowania",
+        "mjpeg": "MJPEG: jeden ffmpeg na widza, działa z każdym kodekiem i wieloma widzami, bez dźwięku"
+      }
+    },
+    "video_codec": {
+      "options": {
+        "auto": "Auto (zalecane): wykrywa kodek",
+        "h264": "H.264: domofon wysyła H.264, bez wykrywania",
+        "hevc": "HEVC → H.264: transkoduje H.265, aby przeglądarki pokazały go przez WebRTC (zużywa CPU)",
+        "hevc_copy": "HEVC bez zmian: przekazuje H.265 nietknięty, dla słabych hostów, Frigate lub Safari"
+      }
     }
   }
 }
