@@ -501,13 +501,18 @@ def _from_keyframe(payload: bytes) -> bytes:
     """Drop what precedes the first keyframe in ``payload``.
 
     Cuts at the MPEG-PS pack header in front of it when there is one, so
-    a muxed chunk still starts on a pack.
+    a muxed chunk still starts on a pack. Otherwise at the video PES header
+    that carries it: the decrypt path often splits pack + PSM and the video
+    PES into separate chunks, and a chunk cut at the NAL itself loses the
+    PES header, so ffmpeg skips that keyframe and waits for the next one.
     """
     hits = [i for i in (payload.find(m) for m in _KEYFRAME_MARKERS) if i >= 0]
     if not hits:
         return payload
     first = min(hits)
     pack = payload.rfind(b"\x00\x00\x01\xba", 0, first)
+    if pack < 0:
+        pack = payload.rfind(b"\x00\x00\x01\xe0", 0, first)
     return payload[pack if pack >= 0 else first:]
 
 
