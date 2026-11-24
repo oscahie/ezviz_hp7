@@ -260,8 +260,7 @@
               "verification_code": "Le 6 lettere sull'etichetta del dispositivo. Può servire per l'accesso e/o per decifrare il video, a seconda della modalità.",
               "encryption_key": "Solo se hai cambiato la password di crittografia video nell'app EZVIZ. Altrimenti lascia vuoto.",
               "stream_quality": "Si applica solo alla riproduzione locale tramite le porte 9010/9020. Con la porta 8000, entrambe le qualità video saranno disponibili come entità video separate. Ignorata dalla sorgente Cloud.",
-              "stream_mode": "Come il video arriva al browser.",
-              "video_codec": "Cosa fa il relay con il video prima di passarlo."
+              "stream_mode": "Come il video arriva al browser."
             }
           },
           "advanced": {
