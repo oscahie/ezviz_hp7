@@ -247,7 +247,6 @@
         "sections": {
           "video": {
             "name": "Video live",
-            "description": "Da dove arriva il live e come raggiunge il browser.",
             "data": {
               "stream_source": "Sorgente stream",
               "verification_code": "Codice di verifica",

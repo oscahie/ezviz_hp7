@@ -287,7 +287,6 @@
         "sections": {
           "video": {
             "name": "Live video",
-            "description": "Where the live view comes from and how it reaches the browser.",
             "data": {
               "stream_source": "Stream source",
               "verification_code": "Verification code",

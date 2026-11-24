@@ -247,7 +247,6 @@
         "sections": {
           "video": {
             "name": "Vidéo en direct",
-            "description": "D'où vient le direct et comment il arrive au navigateur.",
             "data": {
               "stream_source": "Source du flux",
               "verification_code": "Code de vérification",

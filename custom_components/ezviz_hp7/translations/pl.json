@@ -247,7 +247,6 @@
         "sections": {
           "video": {
             "name": "Obraz na żywo",
-            "description": "Skąd pochodzi podgląd na żywo i jak trafia do przeglądarki.",
             "data": {
               "stream_source": "Źródło strumienia",
               "verification_code": "Kod weryfikacyjny",
