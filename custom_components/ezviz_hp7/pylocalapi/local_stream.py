@@ -302,6 +302,7 @@ def hcnetsdk_command_port_native_lan_live_view_plan(
     name: str = HCNETSDK_COMMAND_PORT_NATIVE_PLAN_APP_LAN_LIVE_VIEW,
     *,
     channel: int = 1,
+    stream_type: int = 0,
 ) -> HcNetSdkCommandPortGeneratedMultiSocketPlan:
     """Return an app-observed generated port-8000 LAN live-view plan.
 
@@ -311,7 +312,8 @@ def hcnetsdk_command_port_native_lan_live_view_plan(
     request. The media socket deliberately keeps the native 64-byte ``IMKH``
     response as prefix before the first media frame by not reading it as a
     control response. ``channel`` is the preview channel (HP7 door stations
-    stream on IP channel 33).
+    stream on IP channel 33). ``stream_type`` 0 is the main stream, 1 the
+    sub stream (HP7 Pro: 1280x720 H.264).
     """
     if name != HCNETSDK_COMMAND_PORT_NATIVE_PLAN_APP_LAN_LIVE_VIEW:
         raise PyEzvizError(f"Unsupported HCNetSDK native command-port plan: {name}")
@@ -386,7 +388,7 @@ def hcnetsdk_command_port_native_lan_live_view_plan(
                 (
                     _hcnetsdk_template(
                         0x30000,
-                        f"{channel:08x}0000000000000401",
+                        f"{channel:08x}{stream_type:08x}00000401",
                         addend_delta=5,
                     ),
                 ),

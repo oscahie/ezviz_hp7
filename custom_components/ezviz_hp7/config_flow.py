@@ -7,7 +7,12 @@ from typing import Any
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
-from homeassistant.data_entry_flow import FlowResult
+from homeassistant.data_entry_flow import FlowResult, section
+from homeassistant.helpers.selector import (
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
+)
 
 from .api import Hp7Api
 from .const import (
@@ -38,6 +43,34 @@ from .const import (
 from .pylocalapi.exceptions import EzvizAuthVerificationCode
 
 CONF_SMS_CODE = "sms_code"
+
+# Options form layout: the live-video fields sit in an expanded section, the
+# relay / troubleshooting knobs in a collapsed one. Saved options stay flat;
+# only the form nests them.
+SECTION_VIDEO = "video"
+SECTION_ADVANCED = "advanced"
+_SECTIONS = (SECTION_VIDEO, SECTION_ADVANCED)
+
+
+def _radio(options: list[str], translation_key: str) -> SelectSelector:
+    """One-option-per-line picker whose labels come from translations."""
+    return SelectSelector(
+        SelectSelectorConfig(
+            options=options,
+            mode=SelectSelectorMode.LIST,
+            translation_key=translation_key,
+        )
+    )
+
+
+def _flatten_sections(user_input: dict[str, Any]) -> dict[str, Any]:
+    """Merge the form's section sub-dicts back into one flat dict."""
+    flat = {k: v for k, v in user_input.items() if k not in _SECTIONS}
+    for key in _SECTIONS:
+        sub = user_input.get(key)
+        if isinstance(sub, dict):
+            flat.update(sub)
+    return flat
 SMS_SCHEMA = vol.Schema({vol.Required(CONF_SMS_CODE): str})
 
 _LOGGER = logging.getLogger(__name__)
@@ -326,6 +359,7 @@ class OptionsFlow(config_entries.OptionsFlow):
     ) -> FlowResult:
         """Manage options."""
         if user_input is not None:
+            user_input = _flatten_sections(user_input)
             monitor = (user_input.get(CONF_MONITOR_SERIAL) or "").strip()
             try:
                 relay_port = int(user_input.get(CONF_RELAY_PORT) or 0)
@@ -483,9 +517,30 @@ class OptionsFlow(config_entries.OptionsFlow):
             )
         )
 
-        schema = vol.Schema(
+        video = vol.Schema(
             {
-                vol.Optional(CONF_MONITOR_SERIAL, default=current or ""): str,
+                vol.Optional(
+                    CONF_STREAM_SOURCE, default=current_source
+                ): _radio(STREAM_SOURCES, CONF_STREAM_SOURCE),
+                vol.Optional(
+                    CONF_VERIFICATION_CODE, default=current_verify_code
+                ): str,
+                vol.Optional(
+                    CONF_ENCRYPTION_KEY, default=current_enc_key
+                ): str,
+                vol.Optional(
+                    CONF_STREAM_QUALITY, default=current_quality
+                ): _radio(STREAM_QUALITIES, CONF_STREAM_QUALITY),
+                vol.Optional(
+                    CONF_STREAM_MODE, default=current_mode
+                ): _radio(STREAM_MODES, CONF_STREAM_MODE),
+                vol.Optional(
+                    CONF_VIDEO_CODEC, default=current_codec
+                ): _radio(VIDEO_CODECS, CONF_VIDEO_CODEC),
+            }
+        )
+        advanced = vol.Schema(
+            {
                 vol.Optional(
                     CONF_RELAY_PORT, default=current_port_int
                 ): vol.All(vol.Coerce(int), vol.Range(min=0, max=65535)),
@@ -494,26 +549,19 @@ class OptionsFlow(config_entries.OptionsFlow):
                     CONF_AGGRESSIVE_MPEGTS, default=current_aggressive
                 ): bool,
                 vol.Optional(
-                    CONF_VIDEO_CODEC, default=current_codec
-                ): vol.In(VIDEO_CODECS),
-                vol.Optional(
-                    CONF_STREAM_SOURCE, default=current_source
-                ): vol.In(STREAM_SOURCES),
-                vol.Optional(
-                    CONF_STREAM_MODE, default=current_mode
-                ): vol.In(STREAM_MODES),
-                vol.Optional(
-                    CONF_STREAM_QUALITY, default=current_quality
-                ): vol.In(STREAM_QUALITIES),
-                vol.Optional(
-                    CONF_VERIFICATION_CODE, default=current_verify_code
-                ): str,
-                vol.Optional(
-                    CONF_ENCRYPTION_KEY, default=current_enc_key
-                ): str,
-                vol.Optional(
                     CONF_DIAGNOSTIC_DUMPS, default=current_dumps
                 ): bool,
+            }
+        )
+        schema = vol.Schema(
+            {
+                vol.Optional(CONF_MONITOR_SERIAL, default=current or ""): str,
+                vol.Required(SECTION_VIDEO): section(
+                    video, {"collapsed": False}
+                ),
+                vol.Required(SECTION_ADVANCED): section(
+                    advanced, {"collapsed": True}
+                ),
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)

@@ -185,6 +185,9 @@
       },
       "live": {
         "name": "Live"
+      },
+      "live_sub": {
+        "name": "Live (low resolution)"
       }
     },
     "number": {
@@ -274,23 +277,46 @@
     "step": {
       "init": {
         "title": "EZVIZ HP7 / CP7 options",
-        "description": "Enter the indoor monitor serial (or several serials separated by commas for the HP7 two-family setup) to expose a dedicated switch per monitor. Empty = no monitor.",
+        "description": "Settings for this doorbell. Each option explains itself below it; the advanced section can usually be left as is.",
         "data": {
-          "monitor_serial": "Indoor monitor serial",
-          "relay_port": "Fixed TCP port for the live relay (0 = random, suggested 8554 for go2rtc / mediamtx)",
-          "relay_bind": "Relay listen host (127.0.0.1 = local-only, safe default; 0.0.0.0 exposes the UNAUTHENTICATED raw stream to other hosts, e.g. Frigate — trusted networks only, requires a fixed port)",
-          "aggressive_mpegts": "Aggressive MPEG-TS compatibility (enable if you see 'Immediate exit requested' in logs; safe to leave OFF by default)",
-          "video_codec": "Video codec (auto = detect; hevc transcodes H.265 to H.264 for WebRTC; hevc_copy passes H.265 through untouched for low-power hosts / Frigate / Safari)",
-          "stream_source": "Stream source (cloud = EZVIZ VTM relay; local = direct LAN, bypasses the cloud and fixes 'no live' on firmware that won't push to the cloud — needs HA on the same network as the doorbell; local_sdk = direct LAN on port 8000, logs in with the verification code below; works on accounts the doorbell is only shared with; auto = try local then cloud)",
-          "stream_mode": "Live view delivery (auto = default: detects the codec and picks for you — H.264 → webrtc, HEVC → mjpeg; webrtc = HA Stream/go2rtc, has audio + low latency but can't show HEVC without transcoding; mjpeg = per-viewer ffmpeg to motion-JPEG, codec-agnostic and robust for HEVC/multi-viewer but no audio)",
-          "stream_quality": "LAN stream quality (main = full resolution; sub = the device's low-resolution substream, far cheaper to decode — use it if video accumulates delay on a weak host such as a Raspberry Pi. Applies to the 'local' source only)",
-          "verification_code": "Verification code",
-          "encryption_key": "Video encryption password",
-          "diagnostic_dumps": "Diagnostic dumps (writes two .bin files in /config capturing the start of the stream, for bitstream analysis when reporting a video problem. Leave OFF: not useful in normal operation)"
+          "monitor_serial": "Indoor monitor serial number"
         },
         "data_description": {
-          "verification_code": "The 6 letters on the device label. Logs in for the 'local_sdk' source and decrypts the video while encryption uses the label code.",
-          "encryption_key": "Only if you changed the video encryption password in the EZVIZ app. Leave empty otherwise."
+          "monitor_serial": "Enter the indoor monitor serial number (or several, separated by commas, for the HP7 two-family setup) to expose a dedicated switch per monitor. Empty = no monitor."
+        },
+        "sections": {
+          "video": {
+            "name": "Live video",
+            "data": {
+              "stream_source": "Stream source",
+              "verification_code": "Verification code",
+              "encryption_key": "Video encryption password",
+              "stream_quality": "LAN stream quality",
+              "stream_mode": "Playback protocol",
+              "video_codec": "Video codec"
+            },
+            "data_description": {
+              "verification_code": "The 6 letters on the device label. May be needed for log-in and/or to decrypt the video, depending on the mode.",
+              "encryption_key": "Only if you changed the video encryption password in the EZVIZ app. Leave empty otherwise.",
+              "stream_quality": "Applicable only to local playback via ports 9010/9020. When port 8000 is used, both video qualities will be available as separate video entities. Ignored by the Cloud source."
+            }
+          },
+          "advanced": {
+            "name": "Advanced",
+            "description": "Relay and troubleshooting settings. Leave as they are unless you need them.",
+            "data": {
+              "relay_port": "Relay TCP port",
+              "relay_bind": "Relay listen address",
+              "aggressive_mpegts": "Aggressive MPEG-TS compatibility",
+              "diagnostic_dumps": "Diagnostic dumps"
+            },
+            "data_description": {
+              "relay_port": "0 = random. Suggested 8554 for go2rtc / mediamtx.",
+              "relay_bind": "127.0.0.1 = this host only (safe). 0.0.0.0 exposes the raw stream, WITHOUT authentication, to other hosts such as Frigate: trusted networks only, and it needs a fixed port.",
+              "aggressive_mpegts": "Turn on only if the logs show 'Immediate exit requested'.",
+              "diagnostic_dumps": "Writes two .bin files in /config with the start of the stream, for reporting a video problem. Leave off in normal use."
+            }
+          }
         }
       }
     }
@@ -335,6 +361,37 @@
     },
     "hang_up_failed": {
       "message": "Hanging up the doorbell call failed. Check the EZVIZ cloud connection; the Home Assistant log has the reason."
+    }
+  },
+  "selector": {
+    "stream_source": {
+      "options": {
+        "cloud": "Cloud: EZVIZ VTM relay",
+        "local": "Local, ports 9010/9020 of the device: HA must be on the same LAN as the doorbell. May still need a cloud API call to get the stream key. Fixes 'no live' on firmware that won't push to the cloud",
+        "local_sdk": "Local, port 8000 of the device. HA must be on the same LAN as the doorbell. It doesn't need the cloud at all. On 4K doorbells it can do both high-res and low-res streams simultaneously. It also works on accounts the doorbell is only shared with.",
+        "auto": "Auto: try local, then cloud"
+      }
+    },
+    "stream_quality": {
+      "options": {
+        "main": "Main: full resolution",
+        "sub": "Sub: low-resolution substream, much lighter to decode. Use it if video lags on a weak host (e.g. Raspberry Pi)"
+      }
+    },
+    "stream_mode": {
+      "options": {
+        "auto": "Auto (default): detects the codec and picks, H.264 → WebRTC, HEVC → MJPEG",
+        "webrtc": "WebRTC: HA Stream/go2rtc, with audio and low latency. Some browsers may not show HEVC",
+        "mjpeg": "MJPEG: one ffmpeg per viewer, works with any codec and several viewers, no audio"
+      }
+    },
+    "video_codec": {
+      "options": {
+        "auto": "Auto (default): detect the codec",
+        "h264": "H.264",
+        "hevc": "HEVC → H.264: with WebRTC, transcodes HEVC to H.264 (might not work well on low-power hosts). MJPEG decodes HEVC directly.",
+        "hevc_copy": "HEVC passthrough: passes H.265 untouched, for low-power hosts, Frigate or Safari. With WebRTC, the browser must support HEVC; MJPEG decodes it on the host."
+      }
     }
   }
 }
