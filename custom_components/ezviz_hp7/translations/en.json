@@ -385,7 +385,7 @@
     "stream_mode": {
       "options": {
         "auto": "Auto (recommended): picks per codec, H.264 → WebRTC, HEVC → MJPEG",
-        "webrtc": "WebRTC: HA Stream/go2rtc, with audio and low latency; can't show HEVC without transcoding",
+        "webrtc": "WebRTC: HA Stream/go2rtc, with audio and low latency. HEVC plays in Chrome, Edge and Safari, but not in Firefox",
         "mjpeg": "MJPEG: one ffmpeg per viewer, works with any codec and many viewers, no audio"
       }
     },
@@ -393,7 +393,7 @@
       "options": {
         "auto": "Auto (recommended): detect the codec",
         "h264": "H.264: the doorbell sends H.264, skip detection",
-        "hevc": "HEVC → H.264: transcode H.265 so WebRTC browsers can show it (uses CPU)",
+        "hevc": "HEVC → H.264: transcode H.265 so every browser, Firefox included, can show it (uses CPU)",
         "hevc_copy": "HEVC passthrough: pass H.265 untouched, for low-power hosts, Frigate or Safari"
       }
     }

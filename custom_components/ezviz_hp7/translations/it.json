@@ -345,7 +345,7 @@
     "stream_mode": {
       "options": {
         "auto": "Auto (consigliato): sceglie in base al codec, H.264 → WebRTC, HEVC → MJPEG",
-        "webrtc": "WebRTC: HA Stream/go2rtc, con audio e bassa latenza; non mostra HEVC senza transcodifica",
+        "webrtc": "WebRTC: HA Stream/go2rtc, con audio e bassa latenza. HEVC si vede in Chrome, Edge e Safari, ma non in Firefox",
         "mjpeg": "MJPEG: un ffmpeg per viewer, funziona con qualsiasi codec e più viewer, senza audio"
       }
     },
@@ -353,7 +353,7 @@
       "options": {
         "auto": "Auto (consigliato): rileva il codec",
         "h264": "H.264: il citofono invia H.264, niente rilevamento",
-        "hevc": "HEVC → H.264: transcodifica H.265 perché i browser lo mostrino via WebRTC (usa CPU)",
+        "hevc": "HEVC → H.264: transcodifica H.265 perché si veda in tutti i browser, Firefox compreso (usa CPU)",
         "hevc_copy": "HEVC inalterato: passa l'H.265 così com'è, per host deboli, Frigate o Safari"
       }
     }

@@ -345,7 +345,7 @@
     "stream_mode": {
       "options": {
         "auto": "Auto (zalecane): wybiera wg kodeka, H.264 → WebRTC, HEVC → MJPEG",
-        "webrtc": "WebRTC: HA Stream/go2rtc, z dźwiękiem i niskim opóźnieniem; nie pokaże HEVC bez transkodowania",
+        "webrtc": "WebRTC: HA Stream/go2rtc, z dźwiękiem i niskim opóźnieniem. HEVC działa w Chrome, Edge i Safari, ale nie w Firefoksie",
         "mjpeg": "MJPEG: jeden ffmpeg na widza, działa z każdym kodekiem i wieloma widzami, bez dźwięku"
       }
     },
@@ -353,7 +353,7 @@
       "options": {
         "auto": "Auto (zalecane): wykrywa kodek",
         "h264": "H.264: domofon wysyła H.264, bez wykrywania",
-        "hevc": "HEVC → H.264: transkoduje H.265, aby przeglądarki pokazały go przez WebRTC (zużywa CPU)",
+        "hevc": "HEVC → H.264: transkoduje H.265, aby działał w każdej przeglądarce, także w Firefoksie (zużywa CPU)",
         "hevc_copy": "HEVC bez zmian: przekazuje H.265 nietknięty, dla słabych hostów, Frigate lub Safari"
       }
     }
