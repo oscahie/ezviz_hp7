@@ -53,6 +53,7 @@ Remove unused devices to free at least one slot.
 - **Buttons**
   - 🔑 Unlock **door** (lock #2 by default)
   - 🚪 Unlock **gate** (lock #1 by default)
+  - 📵 **Hang up** a ringing call — stops the indoor monitor and the phones ringing, as answering in the app does (tested on the HP7 Pro). Use it in automations with `button.press`, e.g. after unlocking the door
 - **Cameras**
   - 📷 **Last-alarm snapshot** (fetched from EZVIZ cloud)
   - 🔐 **Encrypted streams are decrypted** — doorbells that scramble the video (increasingly the default, and not disableable at all on some firmware) play normally once the integration has the device key
