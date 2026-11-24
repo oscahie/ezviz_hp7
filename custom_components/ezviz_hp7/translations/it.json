@@ -257,7 +257,7 @@
             },
             "data_description": {
               "stream_source": "Da dove Home Assistant prende il video live.",
-              "verification_code": "Le 6 lettere sull'etichetta del dispositivo. Serve per accedere con la sorgente 'Locale, porta 8000' e per decifrare il video finché la crittografia usa il codice dell'etichetta.",
+              "verification_code": "Le 6 lettere sull'etichetta del dispositivo.",
               "encryption_key": "Solo se hai cambiato la password di crittografia video nell'app EZVIZ. Altrimenti lascia vuoto.",
               "stream_quality": "Usata solo dalla sorgente 'Locale, LAN'. 'Locale, porta 8000' crea sempre entrambe le telecamere e il cloud fornisce sempre la piena risoluzione.",
               "stream_mode": "Come il video arriva al browser.",

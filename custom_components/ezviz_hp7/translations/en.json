@@ -297,7 +297,7 @@
             },
             "data_description": {
               "stream_source": "Where Home Assistant gets the live video from.",
-              "verification_code": "The 6 letters on the device label. Logs in for the 'Local, port 8000' source and decrypts the video while encryption uses the label code.",
+              "verification_code": "The 6 letters on the device label.",
               "encryption_key": "Only if you changed the video encryption password in the EZVIZ app. Leave empty otherwise.",
               "stream_quality": "Only used by the 'Local, LAN' source. 'Local, port 8000' always creates both cameras, and the cloud always serves full resolution.",
               "stream_mode": "How the video reaches the browser.",
