@@ -16,7 +16,32 @@ from custom_components.ezviz_hp7.pylocalapi.local_stream import (
     hcnetsdk_command_port_native_lan_live_view_plan,
 )
 
-PACK = b"\x00\x00\x01\xba" + b"\x44" * 10
+def _pes(sid: int, payload: bytes, pts: int | None = None) -> bytes:
+    if pts is None:
+        hdr = b"\x80\x00\x00"
+    else:
+        hdr = bytes([
+            0x80, 0x80, 5,
+            0x21 | ((pts >> 29) & 0x0E), (pts >> 22) & 0xFF,
+            0x01 | ((pts >> 14) & 0xFE), (pts >> 7) & 0xFF,
+            0x01 | ((pts << 1) & 0xFE),
+        ])
+    body = hdr + payload
+    return b"\x00\x00\x01" + bytes([sid]) + len(body).to_bytes(2, "big") + body
+
+
+PACK_HEADER = b"\x00\x00\x01\xba" + b"\x44" * 9 + b"\xf8"
+
+
+def _frame(pts: int, parts: int = 1, sid: int = 0xE0) -> bytes:
+    """One pack: a PES with the PTS, then continuation PES without one."""
+    out = PACK_HEADER + _pes(sid, b"f%d" % pts, pts)
+    for i in range(1, parts):
+        out += _pes(sid, b"c%d.%d" % (pts, i))
+    return out
+
+
+PACK = PACK_HEADER
 
 
 def test_plan_requests_the_given_channel():
@@ -50,9 +75,37 @@ def _source_with(chunks) -> NetSdkLanSource:
 def test_payloads_skip_the_imkh_header_and_stop_at_eof():
     header = b"IMKH" + b"\x00" * 60
     # The pack start code straddles two reads.
-    chunks = [header + PACK[:2], PACK[2:] + b"rest", b"more"]
+    stream = _frame(6000) + _frame(12000) + PACK_HEADER
+    chunks = [header + stream[:2], stream[2:30], stream[30:]]
     out = b"".join(_source_with(chunks).iter_payloads())
-    assert out == PACK + b"rest" + b"more"
+    assert out == _frame(6000) + _frame(12000)
+
+
+def test_payloads_drop_the_old_hp7_ring_buffer_replay():
+    # Measured on a CS-HP7-R100: the device loops its ring buffer, so the
+    # same frames come again and again with the PTS jumping back.
+    frames = {p: _frame(p * 6000, parts=3) for p in range(1, 8)}
+    audio = {p: _frame(p * 6000 + 100, sid=0xC0) for p in range(1, 8)}
+    sent = []
+    for lap in ([1, 2, 3], [1, 2, 3, 4], [2, 3, 4, 5, 6], [1, 2, 3, 4, 5, 6, 7]):
+        for p in lap:
+            sent += [frames[p], audio[p]]
+    stream = b"".join(sent) + PACK_HEADER
+    # Split at awkward places to exercise buffering.
+    chunks = [b"IMKH" + b"\x00" * 60] + [
+        stream[i:i + 37] for i in range(0, len(stream), 37)
+    ]
+    out = b"".join(_source_with(chunks).iter_payloads())
+    assert out == b"".join(frames[p] + audio[p] for p in range(1, 8))
+
+
+def test_replay_filter_handles_the_33_bit_pts_wrap():
+    from custom_components.ezviz_hp7._pes import PsReplayFilter
+
+    f = PsReplayFilter()
+    a, b, c = (1 << 33) - 6000, 0, 6000
+    out = f.feed(_frame(a) + _frame(b) + _frame(a) + _frame(c) + PACK_HEADER)
+    assert out == _frame(a) + _frame(b) + _frame(c)
 
 
 def test_start_without_code_fails_before_touching_the_network():
@@ -191,3 +244,27 @@ def test_decrypted_output_waits_for_the_encryption_mode(monkeypatch):
     assert relay._maybe_decrypt(PACK) == b""
     assert relay._maybe_decrypt(PACK + b"x") == PACK + PACK + b"x"
     assert modes == [True, True]  # both chunks decrypted as IRAP-only
+
+
+def test_replay_filter_keeps_every_pack_of_a_large_frame_once():
+    from custom_components.ezviz_hp7._pes import PsReplayFilter
+
+    # A keyframe split over three packs that all carry the same PTS.
+    key = [PACK_HEADER + _pes(0xE0, b"k%d" % i, 6000) for i in range(3)]
+    nxt = _frame(12000)
+    f = PsReplayFilter()
+    # Lap 1 ends after the first two packs; lap 2 replays all of it.
+    out = f.feed(key[0] + key[1] + key[0] + key[1] + key[2] + nxt + PACK_HEADER)
+    assert out == key[0] + key[1] + key[2] + nxt
+
+
+def test_replay_filter_drops_the_pack_cut_short_at_the_ring_seam():
+    from custom_components.ezviz_hp7._pes import PsReplayFilter
+
+    old, cut, new = _frame(1500, parts=2), _frame(12000, parts=3), _frame(18000)
+    # The ring lap restarts mid-way through `cut`: its last PES length now
+    # runs into the replayed `old` pack, which must not slip through.
+    stream = _frame(3000) + cut[:-3] + old + cut + new + PACK_HEADER
+    f = PsReplayFilter()
+    assert f.feed(stream) == _frame(3000) + cut + new
+    assert f.bad_packs >= 1
