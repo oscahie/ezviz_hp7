@@ -41,12 +41,13 @@ async def async_setup_entry(
         entities.append(EzvizHp7Button(hass, api, serial, model, "unlock_gate"))
     if getattr(api, "supports_door", False):
         entities.append(EzvizHp7Button(hass, api, serial, model, "unlock_door"))
+    entities.append(EzvizHp7Button(hass, api, serial, model, "hang_up"))
 
     async_add_entities(entities)
 
 
 class EzvizHp7Button(ButtonEntity):
-    """Button entity to unlock door or gate."""
+    """Button entity to unlock the door or gate, or hang up a call."""
 
     _attr_has_entity_name = True
 
@@ -65,7 +66,7 @@ class EzvizHp7Button(ButtonEntity):
             api: EZVIZ HP7 API instance.
             serial: Device serial number.
             model: Device model label (HP7 / CP7 / ...).
-            action: Button action ("unlock_door" or "unlock_gate").
+            action: Button action ("unlock_door", "unlock_gate" or "hang_up").
         """
         self.hass = hass
         self._api = api
@@ -84,7 +85,7 @@ class EzvizHp7Button(ButtonEntity):
     async def async_press(self) -> None:
         """Handle button press.
 
-        Sends unlock command to EZVIZ device.
+        Sends the unlock or hang-up command to the EZVIZ device.
         """
         _LOGGER.debug("EZVIZ HP7 button pressed: %s (%s)", self._action, self._serial)
 
@@ -99,6 +100,11 @@ class EzvizHp7Button(ButtonEntity):
                 self._api.unlock_door, self._serial
             )
             log_msg = "Unlock Door"
+        elif self._action == "hang_up":
+            success = await self.hass.async_add_executor_job(
+                self._api.hang_up_call, self._serial
+            )
+            log_msg = "Hang up"
         else:
             return
 

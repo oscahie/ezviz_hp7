@@ -148,6 +148,9 @@
       },
       "unlock_door": {
         "name": "Otwórz drzwi"
+      },
+      "hang_up": {
+        "name": "Rozłącz połączenie"
       }
     },
     "switch": {
@@ -293,6 +296,9 @@
     },
     "unlock_gate_failed": {
       "message": "Nie udało się otworzyć bramy. Sprawdź połączenie z chmurą EZVIZ; przyczynę znajdziesz w dzienniku Home Assistant."
+    },
+    "hang_up_failed": {
+      "message": "Nie udało się rozłączyć połączenia z dzwonka. Sprawdź połączenie z chmurą EZVIZ; dziennik Home Assistant podaje przyczynę."
     }
   }
 }

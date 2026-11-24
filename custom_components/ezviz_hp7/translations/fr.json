@@ -148,6 +148,9 @@
       },
       "unlock_door": {
         "name": "Ouvrir portillon"
+      },
+      "hang_up": {
+        "name": "Raccrocher l'appel"
       }
     },
     "switch": {
@@ -293,6 +296,9 @@
     },
     "unlock_gate_failed": {
       "message": "Impossible d'ouvrir le portail. Vérifiez la connexion au cloud EZVIZ ; la cause figure dans le journal de Home Assistant."
+    },
+    "hang_up_failed": {
+      "message": "Impossible de raccrocher l'appel de la sonnette. Vérifiez la connexion au cloud EZVIZ ; le journal de Home Assistant indique la raison."
     }
   }
 }

@@ -148,6 +148,9 @@
       },
       "unlock_door": {
         "name": "Unlock Door"
+      },
+      "hang_up": {
+        "name": "Hang Up Call"
       }
     },
     "switch": {
@@ -333,6 +336,9 @@
     },
     "unlock_gate_failed": {
       "message": "Unlocking the gate failed. Check the EZVIZ cloud connection; the Home Assistant log has the reason."
+    },
+    "hang_up_failed": {
+      "message": "Hanging up the doorbell call failed. Check the EZVIZ cloud connection; the Home Assistant log has the reason."
     }
   }
 }

@@ -51,6 +51,7 @@ Rimuovi i dispositivi inutilizzati per liberare almeno uno slot.
 - **Pulsanti**
   - 🔑 Apri **porta** (serratura #2 di default)
   - 🚪 Apri **cancello** (serratura #1 di default)
+  - 📵 **Riaggancia** una chiamata in arrivo — il monitor interno e i telefoni smettono di suonare, come quando si risponde dall'app (testato sull'HP7 Pro). Nelle automazioni usa `button.press`, ad esempio dopo aver aperto la porta
 - **Telecamere**
   - 📷 **Istantanea ultimo allarme** (scaricata dal cloud EZVIZ)
   - 🔐 **I flussi cifrati vengono decifrati** — i citofoni che cifrano il video (sempre più spesso di default, e su alcuni firmware non disattivabile affatto) funzionano normalmente una volta che l'integrazione ha la chiave del dispositivo

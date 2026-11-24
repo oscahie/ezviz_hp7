@@ -1,6 +1,7 @@
 """EZVIZ HP7 API client."""
 from __future__ import annotations
 
+import calendar
 import hashlib
 import json
 import logging
@@ -8,12 +9,15 @@ import time
 from typing import Any
 
 import requests
+from homeassistant.util import dt as dt_util
 from requests.exceptions import RequestException
 
 from .pylocalapi.client import EzvizClient
 from .pylocalapi.exceptions import EzvizAuthVerificationCode
 from .pylocalapi.camera import EzvizCamera
 from .pylocalapi.cas import EzvizCAS
+from .pylocalapi import talk
+from .pylocalapi.cloud_stream import get_vtdu_token_v2
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,6 +30,9 @@ CHIME_CACHE_TTL = 60.0
 # so a sustained cloud outage doesn't turn into a login on every 15 s poll —
 # the rate-limit risk the coordinator's single-shot force_relogin avoids.
 TOKEN_RELOGIN_BACKOFF = 300.0
+# A hang-up press with no doorbell call in the cloud ring log for this long
+# logs a warning. The monitor stops ringing on its own after 20 s.
+RING_RECENT_SECONDS = 60
 
 REGION_URLS: dict[str, str] = {
     "eu": "apiieu.ezvizlife.com",
@@ -35,6 +42,17 @@ REGION_URLS: dict[str, str] = {
     "sa": "apiisa.ezvizlife.com",
     "ru": "apirus.ezvizru.com",
 }
+
+
+def _local_wall_epoch() -> float:
+    """Now in the clock the ring log's ``time`` field uses.
+
+    That field is the device's local wall time counted as if it were UTC
+    (09:57 CET comes back as 09:57 UTC), so compare it with Home Assistant's
+    local time read the same way. Assumes HA and the doorbell share a zone.
+    """
+    now = dt_util.now()
+    return calendar.timegm(now.timetuple()) + now.microsecond / 1e6
 
 
 class Hp7Api:
@@ -592,6 +610,56 @@ class Hp7Api:
         return self._try_unlock(serial, DEFAULT_GATE_LOCK_NO) or self._try_unlock(
             serial, DEFAULT_DOOR_LOCK_NO
         )
+
+    def hang_up_call(self, serial: str) -> bool:
+        """Hang up a ringing doorbell call, as answering in the app does.
+
+        Opens a cloud talk session and closes it once the doorbell has joined
+        (see ``pylocalapi.talk``); the indoor monitor and the phones stop
+        ringing. Works whether or not a call is ringing, so it acts at once;
+        a press with no recent call only logs a warning.
+
+        Returns:
+            True if the doorbell joined the talk session.
+        """
+        try:
+            self.ensure_client()
+            client = self._client
+            tts = client._api_get_pagelist(page_filter="TTS", json_key="TTS")[serial]
+            host = tts.get("externalIp") or tts["domain"]
+            token = get_vtdu_token_v2(client)["tokens"][0]
+            talk.hang_up(host, int(tts["port"]), serial, token)
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.warning("EZVIZ HP7: hang up failed (serial=%s): %s", serial, exc)
+            return False
+        if not self._call_ringing_recently(serial):
+            _LOGGER.warning(
+                "EZVIZ HP7: hang up pressed but no doorbell call in the last %ss "
+                "(serial=%s); nothing to hang up",
+                RING_RECENT_SECONDS,
+                serial,
+            )
+            return True
+        _LOGGER.info("EZVIZ HP7: call hung up (serial=%s)", serial)
+        return True
+
+    def _call_ringing_recently(self, serial: str) -> bool:
+        """Whether the cloud ring log has a call from the last minute.
+
+        The ring message shows up a few seconds after the ring, so this is
+        checked after hanging up, never before. Unknown counts as ringing.
+        """
+        try:
+            payload = self._client._request_json(
+                "GET",
+                "/v3/unifiedmsg/list",
+                params={"serials": serial, "stype": "2701", "limit": 1, "date": "", "endTime": ""},
+            )
+            ring_ms = int(((payload.get("message") or [{}])[0]).get("time") or 0)
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.debug("EZVIZ HP7: ring log lookup failed: %s", exc)
+            return True
+        return _local_wall_epoch() - ring_ms / 1000 < RING_RECENT_SECONDS
 
     # Range of the ChimeMusic ``volume`` field. The app's slider goes to 100
     # and the HP7 Pro door station refuses 101. On the Pro door station this
