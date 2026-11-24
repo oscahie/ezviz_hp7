@@ -207,10 +207,10 @@ class PsReplayFilter:
     data; such packs are dropped whole, and the stream resyncs at the next
     pack header.
 
-    A complete pack is kept when its first PTS is newer than the newest
-    already sent for that stream (video and audio apart, 33-bit wrap
+    A complete pack is kept when every PTS in it is newer than the newest
+    already sent for its stream (video and audio apart, 33-bit wrap
     handled). A large frame spans several packs with the same PTS, so a
-    pack with the newest PTS is also kept unless that exact pack was
+    PTS equal to the newest also counts unless that exact pack was
     already sent. Packs without a PTS follow the pack before them.
     Payloads are never touched, so encrypted streams pass unchanged.
     """
@@ -227,30 +227,32 @@ class PsReplayFilter:
         self.passed_bytes = 0
         self.bad_packs = 0
 
-    def _scan_pack(self, buf: bytearray, start: int) -> tuple[int, int | None] | None:
+    def _scan_pack(
+        self, buf: bytearray, start: int
+    ) -> tuple[int, list[int]] | None:
         """Parse the pack at ``start``.
 
-        Returns (end, first PTS packet offset or None) for a complete,
-        well-formed pack; (-1, None) for a malformed one; None when more
-        data is needed.
+        Returns (end, offsets of the PES packets carrying a PTS) for a
+        complete, well-formed pack; (-1, []) for a malformed one; None when
+        more data is needed.
         """
         n = len(buf)
         if n - start < 14:
             return None
         q = start + 14 + (buf[start + 13] & 0x07)
-        first_pts = None
+        with_pts: list[int] = []
         while True:
             if q - start > self.MAX_PACK:
-                return -1, None
+                return -1, []
             if n - q < 4:
                 return None
             if buf[q] or buf[q + 1] or buf[q + 2] != 1:
-                return -1, None
+                return -1, []
             sid = buf[q + 3]
             if sid == 0xBA:
-                return q, first_pts
+                return q, with_pts
             if sid == 0xB9:
-                return q + 4, first_pts
+                return q + 4, with_pts
             if n - q < 6:
                 return None
             length = (buf[q + 4] << 8) | buf[q + 5]
@@ -262,28 +264,39 @@ class PsReplayFilter:
                     return None
             if end > n:
                 return None
-            if first_pts is None and (0xC0 <= sid <= 0xEF):
-                if _pes_pts(buf, q, end) is not None:
-                    first_pts = q
+            if 0xC0 <= sid <= 0xEF and _pes_pts(buf, q, end) is not None:
+                with_pts.append(q - start)
             q = end
 
-    def _decide(self, pack: bytes, pts_at: int | None) -> bool:
-        if pts_at is None:
+    def _decide(self, pack: bytes, with_pts: list[int]) -> bool:
+        """Keep the pack only if every PTS in it is new for its stream."""
+        if not with_pts:
             return self._last_keep
-        kind = pack[pts_at + 3] & 0xF0  # 0xE0 video, 0xC0/0xD0 audio
-        pts = _pes_pts(pack, pts_at, len(pack))
-        last = self._newest.get(kind)
-        if last is None or 0 < (pts - last) % _PTS_WRAP < _PTS_HALF:
-            self._newest[kind] = pts
-            self._sent[kind] = {zlib.crc32(pack)}
-            return True
-        if pts == last:
+        crc = None
+        updates: dict[int, int] = {}
+        for off in with_pts:
+            kind = pack[off + 3] & 0xF0  # 0xE0 video, 0xC0/0xD0 audio
+            pts = _pes_pts(pack, off, len(pack))
+            last = updates.get(kind, self._newest.get(kind))
+            if last is None or 0 < (pts - last) % _PTS_WRAP < _PTS_HALF:
+                updates[kind] = pts
+                continue
+            if pts == last:
+                if crc is None:
+                    crc = zlib.crc32(pack)
+                if crc not in self._sent.get(kind, ()):
+                    continue
+            return False
+        if crc is None:
             crc = zlib.crc32(pack)
-            sent = self._sent.setdefault(kind, set())
-            if crc not in sent:
-                sent.add(crc)
-                return True
-        return False
+        for kind in {pack[off + 3] & 0xF0 for off in with_pts}:
+            pts = updates.get(kind)
+            if pts is not None and pts != self._newest.get(kind):
+                self._newest[kind] = pts
+                self._sent[kind] = {crc}
+            else:
+                self._sent.setdefault(kind, set()).add(crc)
+        return True
 
     def feed(self, data: bytes) -> bytes:
         """Append ``data``; return the bytes that can be passed on now."""
@@ -304,7 +317,7 @@ class PsReplayFilter:
             scanned = self._scan_pack(buf, pos)
             if scanned is None:
                 break
-            end, pts_at = scanned
+            end, with_pts = scanned
             if end < 0:
                 # Cut short at the ring seam (or corrupt): resync.
                 self.bad_packs += 1
@@ -312,9 +325,7 @@ class PsReplayFilter:
                 pos += 4
                 continue
             pack = bytes(buf[pos:end])
-            keep = self._decide(
-                pack, None if pts_at is None else pts_at - pos
-            )
+            keep = self._decide(pack, with_pts)
             self._last_keep = keep
             if keep:
                 out += pack
