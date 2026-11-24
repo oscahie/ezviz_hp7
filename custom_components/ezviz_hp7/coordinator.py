@@ -127,6 +127,7 @@ class Hp7Coordinator(DataUpdateCoordinator):
         # Relay handle, set by the camera platform once it exists. Used to
         # back polling off while someone is watching the LAN stream (#44).
         self.live_relay: Any = None
+        self.live_relay_sub: Any = None
         self._slowed_for_stream = False
 
     def _apply_stream_aware_interval(self) -> None:
@@ -139,12 +140,12 @@ class Hp7Coordinator(DataUpdateCoordinator):
         someone is actually watching, poll at a quarter of the rate; restore
         the normal cadence as soon as the last viewer leaves.
         """
-        relay = self.live_relay
-        watching = bool(
+        watching = any(
             relay is not None
             and getattr(relay, "_active_lan", False)
             and getattr(relay, "_active_clients", 0)
             - getattr(relay, "_snapshot_clients", 0) > 0
+            for relay in (self.live_relay, self.live_relay_sub)
         )
         if watching == self._slowed_for_stream:
             return
