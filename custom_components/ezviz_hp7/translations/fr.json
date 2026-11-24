@@ -257,7 +257,7 @@
             },
             "data_description": {
               "stream_source": "D'où Home Assistant récupère la vidéo en direct.",
-              "verification_code": "Les 6 lettres de l'étiquette de l'appareil.",
+              "verification_code": "Les 6 lettres de l'étiquette de l'appareil. Peut être nécessaire pour la connexion et/ou pour déchiffrer la vidéo, selon le mode.",
               "encryption_key": "Uniquement si vous avez changé le mot de passe de chiffrement vidéo dans l'app EZVIZ. Sinon, laissez vide.",
               "stream_quality": "Utilisée uniquement par la source « Local, LAN ». « Local, port 8000 » crée toujours les deux caméras et le cloud sert toujours la pleine résolution.",
               "stream_mode": "Comment la vidéo arrive au navigateur.",
