@@ -237,23 +237,50 @@
     "step": {
       "init": {
         "title": "Opzioni EZVIZ HP7 / CP7",
-        "description": "Inserisci il serial del monitor interno (o più serial separati da virgola per HP7 bifamigliare) per esporre uno switch dedicato per ogni monitor. Vuoto = nessun monitor.",
+        "description": "Impostazioni di questo citofono. Ogni opzione è spiegata sotto di sé; la sezione avanzata di solito si può lasciare com'è.",
         "data": {
-          "monitor_serial": "Serial monitor interno",
-          "relay_port": "Porta TCP fissa relay (0 = casuale, suggerito 8554 per go2rtc/mediamtx)",
-          "relay_bind": "Host di ascolto del relay (127.0.0.1 = solo locale, default sicuro; 0.0.0.0 espone lo stream raw NON autenticato ad altri host, es. Frigate — solo reti fidate, richiede porta fissa)",
-          "aggressive_mpegts": "Compatibilità MPEG-TS aggressiva (abilita se vedi 'Immediate exit requested' nei log; sicuro lasciarlo OFF di default)",
-          "video_codec": "Codec video (auto = rileva; hevc transcodifica H.265 in H.264 per WebRTC; hevc_copy passa H.265 inalterato per host deboli / Frigate / Safari)",
-          "stream_source": "Sorgente stream (cloud = relay VTM EZVIZ; local = LAN diretta, bypassa il cloud e risolve 'live assente' sui firmware che non pushano al cloud — richiede HA sulla stessa rete del citofono; local_sdk = LAN diretta sulla porta 8000, accede con il codice di verifica qui sotto; funziona con account con cui il citofono è solo condiviso; aggiunge sempre una seconda telecamera live a bassa risoluzione accanto a quella a piena risoluzione; auto = prova local poi cloud)",
-          "stream_mode": "Modalità live (auto = default: rileva il codec e sceglie da solo — H.264 → webrtc, HEVC → mjpeg; webrtc = HA Stream/go2rtc, con audio + bassa latenza ma non mostra HEVC senza transcodifica; mjpeg = ffmpeg per-viewer in motion-JPEG, codec-agnostico e robusto per HEVC/multi-viewer ma senza audio)",
-          "stream_quality": "Qualità stream LAN (main = piena risoluzione; sub = flusso a bassa risoluzione del dispositivo, molto più leggero da decodificare — usalo se il video accumula ritardo su host deboli tipo Raspberry. Solo sorgente 'local')",
-          "verification_code": "Codice di verifica",
-          "encryption_key": "Password di crittografia video",
-          "diagnostic_dumps": "Dump diagnostici (scrive due file .bin in /config con l'inizio dello stream, solo per analisi quando segnali un problema video. Lascia OFF: sono inutili nell'uso normale)"
+          "monitor_serial": "Serial monitor interno"
         },
         "data_description": {
-          "verification_code": "Le 6 lettere sull'etichetta del dispositivo. Serve per accedere con la sorgente 'local_sdk' e per decifrare il video finché la crittografia usa il codice dell'etichetta.",
-          "encryption_key": "Solo se hai cambiato la password di crittografia video nell'app EZVIZ. Altrimenti lascia vuoto."
+          "monitor_serial": "Solo per kit HP7 con monitor interno: il suo serial (o più serial separati da virgola, per l'HP7 bifamigliare) aggiunge uno switch per monitor. Altrimenti lascia vuoto."
+        },
+        "sections": {
+          "video": {
+            "name": "Video live",
+            "description": "Da dove arriva il live e come raggiunge il browser.",
+            "data": {
+              "stream_source": "Sorgente stream",
+              "verification_code": "Codice di verifica",
+              "encryption_key": "Password di crittografia video",
+              "stream_quality": "Qualità stream LAN",
+              "stream_mode": "Modalità live",
+              "video_codec": "Codec video"
+            },
+            "data_description": {
+              "stream_source": "Da dove Home Assistant prende il video live.",
+              "verification_code": "Le 6 lettere sull'etichetta del dispositivo. Serve per accedere con la sorgente 'Locale, porta 8000' e per decifrare il video finché la crittografia usa il codice dell'etichetta.",
+              "encryption_key": "Solo se hai cambiato la password di crittografia video nell'app EZVIZ. Altrimenti lascia vuoto.",
+              "stream_quality": "Usata solo dalla sorgente 'Locale, LAN'. 'Locale, porta 8000' crea sempre entrambe le telecamere e il cloud fornisce sempre la piena risoluzione.",
+              "stream_mode": "Come il video arriva al browser.",
+              "video_codec": "Cosa fa il relay con il video prima di passarlo."
+            }
+          },
+          "advanced": {
+            "name": "Avanzate",
+            "description": "Impostazioni del relay e di diagnostica. Lasciale come sono se non ti servono.",
+            "data": {
+              "relay_port": "Porta TCP del relay",
+              "relay_bind": "Indirizzo di ascolto del relay",
+              "aggressive_mpegts": "Compatibilità MPEG-TS aggressiva",
+              "diagnostic_dumps": "Dump diagnostici"
+            },
+            "data_description": {
+              "relay_port": "0 = casuale. Usa una porta fissa (es. 8554) per leggere lo stream da go2rtc, mediamtx o Frigate.",
+              "relay_bind": "127.0.0.1 = solo questo host (sicuro). 0.0.0.0 espone lo stream raw, SENZA autenticazione, ad altri host come Frigate: solo reti fidate, richiede una porta fissa.",
+              "aggressive_mpegts": "Attivala solo se nei log vedi 'Immediate exit requested'.",
+              "diagnostic_dumps": "Scrive due file .bin in /config con l'inizio dello stream, per segnalare un problema video. Lascia spento nell'uso normale."
+            }
+          }
         }
       }
     }
@@ -298,6 +325,37 @@
     },
     "hang_up_failed": {
       "message": "Impossibile riagganciare la chiamata del campanello. Controlla la connessione al cloud EZVIZ; il log di Home Assistant indica il motivo."
+    }
+  },
+  "selector": {
+    "stream_source": {
+      "options": {
+        "cloud": "Cloud: relay EZVIZ. Funziona ovunque, serve internet",
+        "local": "Locale, LAN: diretto sulla tua rete, senza cloud. Risolve 'live assente' sui firmware che non inviano al cloud; serve la chiave LAN dal cloud (account principale)",
+        "local_sdk": "Locale, porta 8000: diretto sulla tua rete con il codice di verifica. Funziona con account condivisi; aggiunge anche una telecamera a bassa risoluzione",
+        "auto": "Auto: prova prima locale, poi il cloud"
+      }
+    },
+    "stream_quality": {
+      "options": {
+        "main": "Principale: piena risoluzione",
+        "sub": "Secondario: flusso a bassa risoluzione, molto più leggero da decodificare. Usalo se il video accumula ritardo su un host debole (es. Raspberry Pi)"
+      }
+    },
+    "stream_mode": {
+      "options": {
+        "auto": "Auto (consigliato): sceglie in base al codec, H.264 → WebRTC, HEVC → MJPEG",
+        "webrtc": "WebRTC: HA Stream/go2rtc, con audio e bassa latenza; non mostra HEVC senza transcodifica",
+        "mjpeg": "MJPEG: un ffmpeg per viewer, funziona con qualsiasi codec e più viewer, senza audio"
+      }
+    },
+    "video_codec": {
+      "options": {
+        "auto": "Auto (consigliato): rileva il codec",
+        "h264": "H.264: il citofono invia H.264, niente rilevamento",
+        "hevc": "HEVC → H.264: transcodifica H.265 perché i browser lo mostrino via WebRTC (usa CPU)",
+        "hevc_copy": "HEVC inalterato: passa l'H.265 così com'è, per host deboli, Frigate o Safari"
+      }
     }
   }
 }
