@@ -76,6 +76,16 @@ def test_login_code_falls_back_to_the_encryption_key():
     )
 
 
+
+def test_decrypt_key_falls_back_to_the_verification_code():
+    # Unchanged password: the label code alone decrypts.
+    assert _relay("local_sdk", verification_code="CODE")._configured_key == "CODE"
+    # Changed password: the password option wins for decryption only.
+    relay = _relay("local_sdk", encryption_key="PASS", verification_code="CODE")
+    assert relay._configured_key == "PASS"
+    assert relay._login_code == "CODE"
+    assert _relay("local")._configured_key == ""
+
 @pytest.fixture
 def started(monkeypatch):
     """Record which sources were started; CPD7 always fails, port 8000 works."""
