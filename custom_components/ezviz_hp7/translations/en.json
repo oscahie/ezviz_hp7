@@ -315,7 +315,7 @@
               "diagnostic_dumps": "Diagnostic dumps"
             },
             "data_description": {
-              "relay_port": "0 = random. Use a fixed port (e.g. 8554) to read the stream from go2rtc, mediamtx or Frigate.",
+              "relay_port": "0 = random. Suggested 8554 for go2rtc / mediamtx.",
               "relay_bind": "127.0.0.1 = this host only (safe). 0.0.0.0 exposes the raw stream, WITHOUT authentication, to other hosts such as Frigate: trusted networks only, and it needs a fixed port.",
               "aggressive_mpegts": "Turn on only if the logs show 'Immediate exit requested'.",
               "diagnostic_dumps": "Writes two .bin files in /config with the start of the stream, for reporting a video problem. Leave off in normal use."
@@ -370,10 +370,10 @@
   "selector": {
     "stream_source": {
       "options": {
-        "cloud": "Cloud: EZVIZ relay. Works anywhere, needs internet",
-        "local": "Local, LAN: direct on your network, no cloud. Fixes 'no live' on firmware that doesn't push to the cloud; needs the cloud LAN key (main account)",
-        "local_sdk": "Local, port 8000: direct on your network with the verification code. Works on shared accounts; also adds a low-resolution camera",
-        "auto": "Auto: try local first, then the cloud"
+        "cloud": "Cloud: EZVIZ VTM relay",
+        "local": "Local, LAN: direct, bypasses the cloud. Fixes 'no live' on firmware that won't push to the cloud; needs HA on the same network as the doorbell",
+        "local_sdk": "Local, port 8000: direct LAN, logs in with the verification code. Works on accounts the doorbell is only shared with; always adds a second, low-resolution camera",
+        "auto": "Auto: try local, then cloud"
       }
     },
     "stream_quality": {
@@ -384,17 +384,17 @@
     },
     "stream_mode": {
       "options": {
-        "auto": "Auto (recommended): picks per codec, H.264 → WebRTC, HEVC → MJPEG",
-        "webrtc": "WebRTC: HA Stream/go2rtc, with audio and low latency. HEVC plays in Chrome, Edge and Safari, but not in Firefox",
-        "mjpeg": "MJPEG: one ffmpeg per viewer, works with any codec and many viewers, no audio"
+        "auto": "Auto (default): detects the codec and picks, H.264 → WebRTC, HEVC → MJPEG",
+        "webrtc": "WebRTC: HA Stream/go2rtc, with audio and low latency. Some browsers may not show HEVC",
+        "mjpeg": "MJPEG: one ffmpeg per viewer, works with any codec and several viewers, no audio"
       }
     },
     "video_codec": {
       "options": {
-        "auto": "Auto (recommended): detect the codec",
-        "h264": "H.264: the doorbell sends H.264, skip detection",
-        "hevc": "HEVC → H.264: transcode H.265 so every browser, Firefox included, can show it (uses CPU)",
-        "hevc_copy": "HEVC passthrough: pass H.265 untouched, for low-power hosts, Frigate or Safari"
+        "auto": "Auto (default): detect the codec",
+        "h264": "H.264",
+        "hevc": "HEVC → H.264: transcodes H.265 to H.264 for WebRTC",
+        "hevc_copy": "HEVC passthrough: passes H.265 untouched, for low-power hosts, Frigate or Safari"
       }
     }
   }
