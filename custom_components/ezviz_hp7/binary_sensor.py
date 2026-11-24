@@ -484,25 +484,28 @@ class Hp7BinaryAlarm(CoordinatorEntity, BinarySensorEntity):
                 self._attr_translation_key in ("doorbell_ringing",)
                 or self._attr_translation_key in _UNLOCK_KEYS
             ) and self.hass is not None:
-                relay = (
+                entry_data = (
                     self.hass.data.get(DOMAIN, {})
                     .get(self._entry_id_for_relay(), {})
-                    .get("live_relay")
                     if hasattr(self, "_entry_id_for_relay")
-                    else None
+                    else {}
                 )
                 # Simpler: scan all entries for one carrying our serial.
-                if relay is None:
+                if entry_data.get("live_relay") is None:
                     for data in (self.hass.data.get(DOMAIN, {}) or {}).values():
                         if (
                             isinstance(data, dict)
                             and data.get("serial") == self._serial
                             and data.get("live_relay") is not None
                         ):
-                            relay = data["live_relay"]
+                            entry_data = data
                             break
-                if relay is not None:
-                    self.hass.async_create_task(relay.prewarm())
+                # Warm the low-resolution camera too: it may be the only
+                # one the dashboard shows.
+                for key in ("live_relay", "live_relay_sub"):
+                    relay = entry_data.get(key)
+                    if relay is not None:
+                        self.hass.async_create_task(relay.prewarm())
             # Fire HA event for unlock categories so automations can branch
             # on the kind of unlock without polling state.
             if self._attr_translation_key in _UNLOCK_KEYS and self.hass is not None:

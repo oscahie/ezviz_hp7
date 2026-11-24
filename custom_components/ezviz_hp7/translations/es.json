@@ -185,6 +185,9 @@
       },
       "live": {
         "name": "En Vivo"
+      },
+      "live_sub": {
+        "name": "En Vivo (baja resolución)"
       }
     },
     "number": {
@@ -281,7 +284,7 @@
           "relay_bind": "Host de escucha del relay (127.0.0.1 = solo local, valor seguro; 0.0.0.0 expone el stream raw SIN autenticación a otros hosts, p.ej. Frigate — solo redes de confianza, requiere puerto fijo)",
           "aggressive_mpegts": "Compatibilidad MPEG-TS agresiva (activa si ves 'Immediate exit requested' en los logs; seguro dejarlo OFF por defecto)",
           "video_codec": "Códec de vídeo (auto = detectar; hevc transcodifica H.265 a H.264 para WebRTC; hevc_copy pasa H.265 sin tocar para hosts de baja potencia / Frigate / Safari)",
-          "stream_source": "Fuente del stream (cloud = relay VTM EZVIZ; local = LAN directa, evita la nube y arregla 'sin directo' en firmware que no envía a la nube — requiere HA en la misma red que el videoportero; local_sdk = LAN directa por el puerto 8000, inicia sesión con el código de verificación de abajo; funciona con cuentas con las que el portero solo está compartido; auto = prueba local y luego cloud)",
+          "stream_source": "Fuente del stream (cloud = relay VTM EZVIZ; local = LAN directa, evita la nube y arregla 'sin directo' en firmware que no envía a la nube — requiere HA en la misma red que el videoportero; local_sdk = LAN directa por el puerto 8000, inicia sesión con el código de verificación de abajo; funciona con cuentas con las que el portero solo está compartido; añade siempre una segunda cámara en vivo de baja resolución junto a la de resolución completa; auto = prueba local y luego cloud)",
           "stream_mode": "Modo de visualización (auto = por defecto: detecta el códec y elige solo — H.264 → webrtc, HEVC → mjpeg; webrtc = HA Stream/go2rtc, con audio + baja latencia pero no muestra HEVC sin transcodificar; mjpeg = ffmpeg por visor a motion-JPEG, agnóstico al códec y robusto para HEVC/multi-visor pero sin audio)",
           "stream_quality": "Calidad del stream LAN (main = resolución completa; sub = subflujo de baja resolución del dispositivo, mucho más ligero de decodificar — úsalo si el vídeo acumula retraso en hosts poco potentes como una Raspberry Pi. Solo para la fuente 'local')",
           "verification_code": "Código de verificación",
