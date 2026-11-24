@@ -1334,7 +1334,7 @@ class Hp7StreamRelay:
             )
             return
         self._decrypt_key = key
-        _LOGGER.warning(
+        _LOGGER.debug(
             "Hp7StreamRelay: stream is encrypted — decrypting it with the "
             "camera key (serial=%s)", self._serial,
         )
@@ -1417,17 +1417,23 @@ class Hp7StreamRelay:
         if self._warned_scrambled or parser.scrambled_packets < 8:
             return
         self._warned_scrambled = True
+        self._enable_decryption()
+        if self._decrypt_key is not None:
+            # Decrypting, so this is routine for every session on an
+            # encrypted device: no need to nag the user about it.
+            _LOGGER.debug(
+                "Hp7StreamRelay: stream is scrambled (PES_scrambling_control "
+                "on %d packets, serial=%s); decrypting it with the camera key",
+                parser.scrambled_packets, self._serial,
+            )
+            return
         _LOGGER.warning(
             "Hp7StreamRelay: the doorbell is SCRAMBLING the video "
             "(PES_scrambling_control set on %d packets, serial=%s). Image/"
-            "Video Encryption is enabled on the device; looking for the key "
-            "so the stream can be decrypted.",
+            "Video Encryption is enabled on the device and no key is "
+            "available to decrypt it.",
             parser.scrambled_packets, self._serial,
         )
-        self._enable_decryption()
-        if self._decrypt_key is not None:
-            # Decrypting, so no need to nag the user about the app setting.
-            return
         if self._hass is not None:
             try:
                 self._hass.loop.call_soon_threadsafe(self._raise_scrambled_repair)
