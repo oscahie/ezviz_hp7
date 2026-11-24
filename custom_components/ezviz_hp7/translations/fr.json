@@ -349,7 +349,7 @@
     "stream_mode": {
       "options": {
         "auto": "Auto (recommandé) : choisit selon le codec, H.264 → WebRTC, HEVC → MJPEG",
-        "webrtc": "WebRTC : HA Stream/go2rtc, avec audio et faible latence ; n'affiche pas le HEVC sans transcodage",
+        "webrtc": "WebRTC : HA Stream/go2rtc, avec audio et faible latence. Le HEVC passe dans Chrome, Edge et Safari, mais pas dans Firefox",
         "mjpeg": "MJPEG : un ffmpeg par spectateur, fonctionne avec tout codec et plusieurs spectateurs, sans audio"
       }
     },
@@ -357,7 +357,7 @@
       "options": {
         "auto": "Auto (recommandé) : détecte le codec",
         "h264": "H.264 : le portier envoie du H.264, pas de détection",
-        "hevc": "HEVC → H.264 : transcode le H.265 pour que les navigateurs l'affichent en WebRTC (utilise le CPU)",
+        "hevc": "HEVC → H.264 : transcode le H.265 pour que tous les navigateurs, Firefox compris, l'affichent (utilise le CPU)",
         "hevc_copy": "HEVC tel quel : laisse passer le H.265 intact, pour hôtes peu puissants, Frigate ou Safari"
       }
     }
