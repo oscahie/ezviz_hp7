@@ -2145,6 +2145,12 @@ class Hp7StreamRelay:
         # feed; a queue.Full mid-preload truncates the replay and the viewer
         # just falls back to waiting for the next keyframe.
         gop = self._gop_snapshot()
+        # A client that joins a port-8000 session before its first keyframe
+        # went out gets the stream from its very start, which the device
+        # opens on an IDR, so its relay ffmpeg can stop probing early.
+        starts_on_keyframe = (
+            self._stream_source == "local_sdk" and self._kf_markers_seen == 0
+        )
         if lan:
             for chunk in gop:
                 try:
@@ -2235,7 +2241,15 @@ class Hp7StreamRelay:
                     # #39 HPD7). A large analyzeduration/probesize is a ceiling,
                     # not a fixed wait — it starts as soon as params are known.
                     "-fflags", "+genpts", "-flags", "low_delay",
-                    "-analyzeduration", self._probe_duration_us, "-probesize", "10000000",
+                    # The PS also carries the AAC audio labelled as MP2, which
+                    # never yields codec parameters, so the probe always runs
+                    # to the full analyzeduration (~1 s of start-up delay per
+                    # cold start on an HP7 Pro). When the feed opens on a
+                    # keyframe the video parameters come first and 0.2 s is
+                    # plenty.
+                    "-analyzeduration",
+                    "200000" if starts_on_keyframe else self._probe_duration_us,
+                    "-probesize", "10000000",
                     # NO wall-clock re-timestamping on this input. It is a
                     # real MPEG-PS container that already carries correct
                     # timestamps; stamping by arrival instead collapses the
