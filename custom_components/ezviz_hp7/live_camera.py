@@ -502,6 +502,20 @@ def _has_keyframe(payload: bytes) -> bool:
     return any(m in payload for m in _KEYFRAME_MARKERS)
 
 
+def _from_keyframe(payload: bytes) -> bytes:
+    """Drop what precedes the first keyframe in ``payload``.
+
+    Cuts at the MPEG-PS pack header in front of it when there is one, so
+    a muxed chunk still starts on a pack.
+    """
+    hits = [i for i in (payload.find(m) for m in _KEYFRAME_MARKERS) if i >= 0]
+    if not hits:
+        return payload
+    first = min(hits)
+    pack = payload.rfind(b"\x00\x00\x01\xba", 0, first)
+    return payload[pack if pack >= 0 else first:]
+
+
 def _has_param_sets(payload: bytes) -> bool:
     return any(m in payload for m in _PARAM_SET_MARKERS)
 
@@ -1021,6 +1035,7 @@ class Hp7StreamRelay:
         kf = video and _has_keyframe(item)
         for q in list(qs):
             qid = id(q)
+            out = item
             if video and qid in self._q_resync:
                 # Saturated earlier: skip everything until a keyframe so the
                 # decoder resumes on a decodable boundary instead of being
@@ -1031,7 +1046,10 @@ class Hp7StreamRelay:
                     self._drops += 1
                     continue
                 self._q_resync.discard(qid)
-            if not self._put_latest(q, item) and video:
+                # Start the viewer on the keyframe itself, not on the
+                # undecodable frames that share its chunk.
+                out = _from_keyframe(item)
+            if not self._put_latest(q, out) and video:
                 if not self._warned_saturation:
                     self._warned_saturation = True
                     _LOGGER.warning(
@@ -2152,18 +2170,22 @@ class Hp7StreamRelay:
         # feed; a queue.Full mid-preload truncates the replay and the viewer
         # just falls back to waiting for the next keyframe.
         gop = self._gop_snapshot()
-        # A client that joins a port-8000 session before its first keyframe
-        # went out gets the stream from its very start, which the device
-        # opens on an IDR, so its relay ffmpeg can stop probing early.
-        starts_on_keyframe = (
-            self._stream_source == "local_sdk" and self._kf_markers_seen == 0
-        )
+        # A port-8000 client with no GOP to preload is held back until the
+        # next keyframe (see below), so its relay ffmpeg can stop probing
+        # early.
+        starts_on_keyframe = self._stream_source == "local_sdk" and not gop
         if lan:
             for chunk in gop:
                 try:
                     raw_q.put_nowait(chunk)
                 except queue.Full:
                     break
+            if not gop:
+                # Nothing to preload: hold the live feed back until the
+                # next keyframe. The sub stream joins mid-GOP and can't be
+                # forced to an IDR, and feeding ffmpeg P-frames first only
+                # delays its probe past the keyframe.
+                self._q_resync.add(id(raw_q))
             now0 = time.monotonic()
             self._q_last_drain[id(raw_q)] = now0
             self._q_last_drain[id(a_q)] = now0
