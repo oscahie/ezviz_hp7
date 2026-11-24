@@ -19,6 +19,7 @@ system headers (0xBB) and padding (0xBE) are silently consumed.
 """
 from __future__ import annotations
 
+import zlib
 from typing import Iterator, List, Tuple
 
 
@@ -193,44 +194,96 @@ class PsReplayFilter:
 
     The old HP7 (CS-HP7-R100) on the port-8000 source does not stream its
     video live: it sends its whole ~1 MiB ring buffer over and over, as
-    fast as TCP allows (measured: ~43 Mbit/s, each frame repeated ~35 times,
-    video PTS jumping back ~13 s every ~0.2 s). Fed to ffmpeg as is, the
-    picture plays at many times real speed and keeps looping. The HP7 Pro
-    sends each frame once, so for it this filter is a pass-through.
+    fast as TCP allows (measured: ~43 Mbit/s, each pack repeated byte for
+    byte up to ~60 times, video PTS jumping back ~13 s every ~0.2 s). Fed
+    to ffmpeg as is, the picture plays at many times real speed and keeps
+    looping. The HP7 Pro sends each frame once, so for it this filter is a
+    pass-through.
 
-    Each pack (0xBA up to the next 0xBA) is kept only if its first PES with
-    a PTS is newer than anything already sent for that stream (video and
-    audio tracked apart, 33-bit wrap handled). Packs without a PTS — the
-    continuation of a large frame — follow the decision of the pack before.
+    Packs (0xBA up to the next 0xBA) are only passed on once complete and
+    well formed: every packet must end exactly where the next start code
+    begins. Each lap of the ring starts at an arbitrary byte, so the pack
+    before the seam is cut short and its last PES length runs into old
+    data; such packs are dropped whole, and the stream resyncs at the next
+    pack header.
+
+    A complete pack is kept when its first PTS is newer than the newest
+    already sent for that stream (video and audio apart, 33-bit wrap
+    handled). A large frame spans several packs with the same PTS, so a
+    pack with the newest PTS is also kept unless that exact pack was
+    already sent. Packs without a PTS follow the pack before them.
     Payloads are never touched, so encrypted streams pass unchanged.
     """
 
+    # A pack is one frame at most; anything this long is not a real pack.
+    MAX_PACK = 4 << 20
+
     def __init__(self) -> None:
         self._buf = bytearray()
-        self._pack = bytearray()  # current pack, held until decided
-        self._keep: bool | None = None  # decision for the current pack
         self._last_keep = True
         self._newest: dict[int, int] = {}  # 0xE0 / 0xC0 -> newest PTS sent
+        self._sent: dict[int, set[int]] = {}  # kind -> CRCs at newest PTS
         self.dropped_bytes = 0
         self.passed_bytes = 0
+        self.bad_packs = 0
 
-    def _is_new(self, kind: int, pts: int) -> bool:
+    def _scan_pack(self, buf: bytearray, start: int) -> tuple[int, int | None] | None:
+        """Parse the pack at ``start``.
+
+        Returns (end, first PTS packet offset or None) for a complete,
+        well-formed pack; (-1, None) for a malformed one; None when more
+        data is needed.
+        """
+        n = len(buf)
+        if n - start < 14:
+            return None
+        q = start + 14 + (buf[start + 13] & 0x07)
+        first_pts = None
+        while True:
+            if q - start > self.MAX_PACK:
+                return -1, None
+            if n - q < 4:
+                return None
+            if buf[q] or buf[q + 1] or buf[q + 2] != 1:
+                return -1, None
+            sid = buf[q + 3]
+            if sid == 0xBA:
+                return q, first_pts
+            if sid == 0xB9:
+                return q + 4, first_pts
+            if n - q < 6:
+                return None
+            length = (buf[q + 4] << 8) | buf[q + 5]
+            if length:
+                end = q + 6 + length
+            else:
+                end = buf.find(b"\x00\x00\x01", q + 6)
+                if end < 0:
+                    return None
+            if end > n:
+                return None
+            if first_pts is None and (0xC0 <= sid <= 0xEF):
+                if _pes_pts(buf, q, end) is not None:
+                    first_pts = q
+            q = end
+
+    def _decide(self, pack: bytes, pts_at: int | None) -> bool:
+        if pts_at is None:
+            return self._last_keep
+        kind = pack[pts_at + 3] & 0xF0  # 0xE0 video, 0xC0/0xD0 audio
+        pts = _pes_pts(pack, pts_at, len(pack))
         last = self._newest.get(kind)
-        if last is not None and not 0 < (pts - last) % _PTS_WRAP < _PTS_HALF:
-            return False
-        self._newest[kind] = pts
-        return True
-
-    def _end_pack(self, out: bytearray) -> None:
-        keep = self._last_keep if self._keep is None else self._keep
-        if keep:
-            out += self._pack
-            self.passed_bytes += len(self._pack)
-        else:
-            self.dropped_bytes += len(self._pack)
-        self._pack = bytearray()
-        self._last_keep = keep
-        self._keep = None
+        if last is None or 0 < (pts - last) % _PTS_WRAP < _PTS_HALF:
+            self._newest[kind] = pts
+            self._sent[kind] = {zlib.crc32(pack)}
+            return True
+        if pts == last:
+            crc = zlib.crc32(pack)
+            sent = self._sent.setdefault(kind, set())
+            if crc not in sent:
+                sent.add(crc)
+                return True
+        return False
 
     def feed(self, data: bytes) -> bytes:
         """Append ``data``; return the bytes that can be passed on now."""
@@ -238,52 +291,36 @@ class PsReplayFilter:
         buf += data
         out = bytearray()
         pos = 0
-        n = len(buf)
-        while n - pos >= 6:
-            if buf[pos] or buf[pos + 1] or buf[pos + 2] != 1:
-                idx = buf.find(b"\x00\x00\x01", pos)
+        while True:
+            if buf[pos:pos + 4] != b"\x00\x00\x01\xba":
+                idx = buf.find(b"\x00\x00\x01\xba", pos)
                 if idx < 0:
-                    idx = max(pos, n - 2)
-                # Garbage between packets: keep it with the pack so nothing
-                # the downstream demuxer might want is lost.
-                self._pack += buf[pos:idx]
+                    idx = max(pos, len(buf) - 3)
+                self.dropped_bytes += idx - pos
                 pos = idx
-                continue
-            sid = buf[pos + 3]
-            if sid == 0xBA:
-                if n - pos < 14:
+                if len(buf) - pos < 4:
                     break
-                total = 14 + (buf[pos + 13] & 0x07)
-            elif sid == 0xB9:
-                total = 4
-            else:
-                length = (buf[pos + 4] << 8) | buf[pos + 5]
-                if length:
-                    total = 6 + length
-                else:
-                    idx = buf.find(b"\x00\x00\x01", pos + 6)
-                    if idx < 0:
-                        break
-                    total = idx - pos
-            if n - pos < total:
+                continue
+            scanned = self._scan_pack(buf, pos)
+            if scanned is None:
                 break
-            if sid == 0xBA:
-                self._end_pack(out)
-            elif self._keep is None and (
-                0xE0 <= sid <= 0xEF or 0xC0 <= sid <= 0xDF
-            ):
-                pts = _pes_pts(buf, pos, pos + total)
-                if pts is not None:
-                    self._keep = self._is_new(sid & 0xF0, pts)
-            self._pack += buf[pos:pos + total]
-            pos += total
-            if self._keep is not None and self._pack:
-                # Decided: stream the rest of the pack without holding it.
-                if self._keep:
-                    out += self._pack
-                    self.passed_bytes += len(self._pack)
-                else:
-                    self.dropped_bytes += len(self._pack)
-                self._pack = bytearray()
+            end, pts_at = scanned
+            if end < 0:
+                # Cut short at the ring seam (or corrupt): resync.
+                self.bad_packs += 1
+                self.dropped_bytes += 4
+                pos += 4
+                continue
+            pack = bytes(buf[pos:end])
+            keep = self._decide(
+                pack, None if pts_at is None else pts_at - pos
+            )
+            self._last_keep = keep
+            if keep:
+                out += pack
+                self.passed_bytes += len(pack)
+            else:
+                self.dropped_bytes += len(pack)
+            pos = end
         del buf[:pos]
         return bytes(out)

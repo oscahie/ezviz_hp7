@@ -244,3 +244,27 @@ def test_decrypted_output_waits_for_the_encryption_mode(monkeypatch):
     assert relay._maybe_decrypt(PACK) == b""
     assert relay._maybe_decrypt(PACK + b"x") == PACK + PACK + b"x"
     assert modes == [True, True]  # both chunks decrypted as IRAP-only
+
+
+def test_replay_filter_keeps_every_pack_of_a_large_frame_once():
+    from custom_components.ezviz_hp7._pes import PsReplayFilter
+
+    # A keyframe split over three packs that all carry the same PTS.
+    key = [PACK_HEADER + _pes(0xE0, b"k%d" % i, 6000) for i in range(3)]
+    nxt = _frame(12000)
+    f = PsReplayFilter()
+    # Lap 1 ends after the first two packs; lap 2 replays all of it.
+    out = f.feed(key[0] + key[1] + key[0] + key[1] + key[2] + nxt + PACK_HEADER)
+    assert out == key[0] + key[1] + key[2] + nxt
+
+
+def test_replay_filter_drops_the_pack_cut_short_at_the_ring_seam():
+    from custom_components.ezviz_hp7._pes import PsReplayFilter
+
+    old, cut, new = _frame(1500, parts=2), _frame(12000, parts=3), _frame(18000)
+    # The ring lap restarts mid-way through `cut`: its last PES length now
+    # runs into the replayed `old` pack, which must not slip through.
+    stream = _frame(3000) + cut[:-3] + old + cut + new + PACK_HEADER
+    f = PsReplayFilter()
+    assert f.feed(stream) == _frame(3000) + cut + new
+    assert f.bad_packs >= 1
