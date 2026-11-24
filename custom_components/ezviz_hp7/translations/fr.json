@@ -275,7 +275,7 @@
               "diagnostic_dumps": "Vidages de diagnostic"
             },
             "data_description": {
-              "relay_port": "0 = aléatoire. Utilisez un port fixe (p. ex. 8554) pour lire le flux depuis go2rtc, mediamtx ou Frigate.",
+              "relay_port": "0 = aléatoire. Recommandé 8554 pour go2rtc / mediamtx.",
               "relay_bind": "127.0.0.1 = cet hôte uniquement (sûr). 0.0.0.0 expose le flux brut, SANS authentification, aux autres hôtes comme Frigate : réseaux de confiance uniquement, port fixe requis.",
               "aggressive_mpegts": "À activer seulement si les logs affichent 'Immediate exit requested'.",
               "diagnostic_dumps": "Écrit deux fichiers .bin dans /config avec le début du flux, pour signaler un problème vidéo. Laissez désactivé en usage normal."
@@ -334,10 +334,10 @@
   "selector": {
     "stream_source": {
       "options": {
-        "cloud": "Cloud : relais EZVIZ. Fonctionne partout, nécessite Internet",
-        "local": "Local, LAN : direct sur votre réseau, sans cloud. Corrige « pas de direct » sur les firmwares qui n'émettent pas vers le cloud ; nécessite la clé LAN du cloud (compte principal)",
-        "local_sdk": "Local, port 8000 : direct sur votre réseau avec le code de vérification. Fonctionne avec les comptes partagés ; ajoute aussi une caméra basse résolution",
-        "auto": "Auto : essaie le local d'abord, puis le cloud"
+        "cloud": "Cloud : relais VTM EZVIZ",
+        "local": "Local, LAN : direct, contourne le cloud. Corrige « pas de direct » sur les firmwares qui n'émettent pas vers le cloud ; nécessite HA sur le même réseau que le portier",
+        "local_sdk": "Local, port 8000 : LAN directe, se connecte avec le code de vérification. Fonctionne avec les comptes avec lesquels le portier est seulement partagé ; ajoute toujours une seconde caméra basse résolution",
+        "auto": "Auto : essaie local puis cloud"
       }
     },
     "stream_quality": {
@@ -348,16 +348,16 @@
     },
     "stream_mode": {
       "options": {
-        "auto": "Auto (recommandé) : choisit selon le codec, H.264 → WebRTC, HEVC → MJPEG",
-        "webrtc": "WebRTC : HA Stream/go2rtc, avec audio et faible latence. Le HEVC passe dans Chrome, Edge et Safari, mais pas dans Firefox",
+        "auto": "Auto (par défaut) : détecte le codec et choisit, H.264 → WebRTC, HEVC → MJPEG",
+        "webrtc": "WebRTC : HA Stream/go2rtc, avec audio et faible latence. Certains navigateurs pourraient ne pas afficher le HEVC",
         "mjpeg": "MJPEG : un ffmpeg par spectateur, fonctionne avec tout codec et plusieurs spectateurs, sans audio"
       }
     },
     "video_codec": {
       "options": {
-        "auto": "Auto (recommandé) : détecte le codec",
-        "h264": "H.264 : le portier envoie du H.264, pas de détection",
-        "hevc": "HEVC → H.264 : transcode le H.265 pour que tous les navigateurs, Firefox compris, l'affichent (utilise le CPU)",
+        "auto": "Auto (par défaut) : détecte le codec",
+        "h264": "H.264",
+        "hevc": "HEVC → H.264 : transcode le H.265 en H.264 pour WebRTC",
         "hevc_copy": "HEVC tel quel : laisse passer le H.265 intact, pour hôtes peu puissants, Frigate ou Safari"
       }
     }

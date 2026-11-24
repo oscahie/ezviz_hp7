@@ -275,7 +275,7 @@
               "diagnostic_dumps": "Zrzuty diagnostyczne"
             },
             "data_description": {
-              "relay_port": "0 = losowy. Użyj stałego portu (np. 8554), aby odczytać strumień z go2rtc, mediamtx lub Frigate.",
+              "relay_port": "0 = losowy. Sugerowany 8554 dla go2rtc / mediamtx.",
               "relay_bind": "127.0.0.1 = tylko ten host (bezpieczne). 0.0.0.0 udostępnia surowy strumień BEZ uwierzytelniania innym hostom, np. Frigate: tylko zaufane sieci, wymaga stałego portu.",
               "aggressive_mpegts": "Włącz tylko, jeśli w logach widać 'Immediate exit requested'.",
               "diagnostic_dumps": "Zapisuje dwa pliki .bin w /config z początkiem strumienia, do zgłaszania problemu z obrazem. Przy normalnym użyciu zostaw wyłączone."
@@ -334,9 +334,9 @@
   "selector": {
     "stream_source": {
       "options": {
-        "cloud": "Chmura: przekaźnik EZVIZ. Działa wszędzie, wymaga internetu",
-        "local": "Lokalnie, LAN: bezpośrednio w Twojej sieci, bez chmury. Naprawia 'brak podglądu' na oprogramowaniu, które nie wysyła do chmury; wymaga klucza LAN z chmury (konto główne)",
-        "local_sdk": "Lokalnie, port 8000: bezpośrednio w Twojej sieci z kodem weryfikacyjnym. Działa na kontach udostępnionych; dodaje też kamerę w niskiej rozdzielczości",
+        "cloud": "Chmura: przekaźnik VTM EZVIZ",
+        "local": "Lokalnie, LAN: bezpośrednio, omija chmurę. Naprawia 'brak podglądu' na oprogramowaniu, które nie wysyła do chmury; wymaga HA w tej samej sieci co wideodomofon",
+        "local_sdk": "Lokalnie, port 8000: bezpośrednio w LAN, loguje się kodem weryfikacyjnym. Działa na kontach, którym wideodomofon jest tylko udostępniony; zawsze dodaje drugą kamerę w niskiej rozdzielczości",
         "auto": "Auto: najpierw lokalnie, potem chmura"
       }
     },
@@ -348,16 +348,16 @@
     },
     "stream_mode": {
       "options": {
-        "auto": "Auto (zalecane): wybiera wg kodeka, H.264 → WebRTC, HEVC → MJPEG",
-        "webrtc": "WebRTC: HA Stream/go2rtc, z dźwiękiem i niskim opóźnieniem. HEVC działa w Chrome, Edge i Safari, ale nie w Firefoksie",
+        "auto": "Auto (domyślnie): wykrywa kodek i wybiera, H.264 → WebRTC, HEVC → MJPEG",
+        "webrtc": "WebRTC: HA Stream/go2rtc, z dźwiękiem i niskim opóźnieniem. Niektóre przeglądarki mogą nie wyświetlać HEVC",
         "mjpeg": "MJPEG: jeden ffmpeg na widza, działa z każdym kodekiem i wieloma widzami, bez dźwięku"
       }
     },
     "video_codec": {
       "options": {
-        "auto": "Auto (zalecane): wykrywa kodek",
-        "h264": "H.264: domofon wysyła H.264, bez wykrywania",
-        "hevc": "HEVC → H.264: transkoduje H.265, aby działał w każdej przeglądarce, także w Firefoksie (zużywa CPU)",
+        "auto": "Auto (domyślnie): wykrywa kodek",
+        "h264": "H.264",
+        "hevc": "HEVC → H.264: transkoduje H.265 na H.264 dla WebRTC",
         "hevc_copy": "HEVC bez zmian: przekazuje H.265 nietknięty, dla słabych hostów, Frigate lub Safari"
       }
     }
