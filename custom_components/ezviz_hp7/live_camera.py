@@ -2670,7 +2670,14 @@ async def async_setup_live_entities(
         video_codec=video_codec,
         stream_source=stream_source,
         stream_mode=stream_mode,
-        stream_quality=str(data.get("stream_quality") or "main"),
+        # Only the CPD7 "local" source (also tried first by "auto") lets the
+        # user pick the stream. On port 8000 the main camera is always full
+        # resolution and the low one is a camera of its own (below).
+        stream_quality=(
+            str(data.get("stream_quality") or "main")
+            if stream_source in ("local", "auto")
+            else "main"
+        ),
         diagnostic_dumps=bool(data.get("diagnostic_dumps", False)),
         encryption_key=str(data.get("encryption_key") or ""),
         verification_code=str(data.get("verification_code") or ""),
@@ -2709,12 +2716,13 @@ async def async_setup_live_entities(
 
     entities = [Hp7LiveCamera(serial, model, relay, stream_mode=effective_mode)]
 
-    # The port-8000 source can serve the sub stream (HP7 Pro: 1280x720 H.264)
-    # alongside the main one, from a second device session. Offer it as its
-    # own camera so a dashboard grid can use the light stream while the
-    # full-resolution one stays available. Being H.264 it plays over WebRTC
-    # everywhere, Firefox included.
-    if stream_source == "local_sdk" and relay._stream_quality != "sub":
+    # The port-8000 source can serve the device's low-resolution sub stream
+    # alongside the main one, from a second device session (HP7 Pro: 1280x720
+    # H.264). Offer it as its own camera: a dashboard grid or a weak host
+    # (#44) can use the light stream, and disable the full-resolution camera
+    # if it isn't wanted. The CPD7 "local" source keeps the quality option
+    # instead: the HP7 sends nothing on a CPD7 sub session.
+    if stream_source == "local_sdk":
         sub_relay = Hp7StreamRelay(
             api=api,
             serial=serial,
@@ -2723,7 +2731,7 @@ async def async_setup_live_entities(
             aggressive_mpegts=aggressive_mpegts,
             video_codec="auto",
             stream_source=stream_source,
-            stream_mode=effective_mode,
+            stream_mode=stream_mode,
             stream_quality="sub",
             encryption_key=str(data.get("encryption_key") or ""),
             verification_code=str(data.get("verification_code") or ""),
@@ -2731,8 +2739,16 @@ async def async_setup_live_entities(
         )
         await sub_relay.start()
         data["live_relay_sub"] = sub_relay
+        if coordinator is not None:
+            coordinator.live_relay_sub = sub_relay
+        # The sub stream may use another codec than the main one, so "auto"
+        # is resolved for it on its own.
+        sub_mode = stream_mode
+        if stream_mode == "auto":
+            sub_mode = await _resolve_auto_stream_mode(sub_relay)
+            sub_relay._stream_mode = sub_mode
         entities.append(
-            Hp7LiveCamera(serial, model, sub_relay, stream_mode=effective_mode, sub=True)
+            Hp7LiveCamera(serial, model, sub_relay, stream_mode=sub_mode, sub=True)
         )
 
     async_add_entities(entities)
