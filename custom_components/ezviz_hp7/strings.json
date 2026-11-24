@@ -296,7 +296,6 @@
               "video_codec": "Video codec"
             },
             "data_description": {
-              "stream_source": "Where Home Assistant gets the live video from.",
               "verification_code": "The 6 letters on the device label. May be needed for log-in and/or to decrypt the video, depending on the mode.",
               "encryption_key": "Only if you changed the video encryption password in the EZVIZ app. Leave empty otherwise.",
               "stream_quality": "Applicable only to local playback via ports 9010/9020. When port 8000 is used, both video qualities will be available as separate video entities. Ignored by the Cloud source."

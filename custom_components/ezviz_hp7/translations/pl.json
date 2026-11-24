@@ -256,7 +256,6 @@
               "video_codec": "Kodek wideo"
             },
             "data_description": {
-              "stream_source": "Skąd Home Assistant pobiera obraz na żywo.",
               "verification_code": "6 liter z etykiety urządzenia. Może być potrzebny do logowania i/lub odszyfrowania wideo, zależnie od trybu.",
               "encryption_key": "Tylko jeśli zmieniono hasło szyfrowania wideo w aplikacji EZVIZ. W przeciwnym razie pozostaw puste.",
               "stream_quality": "Dotyczy tylko odtwarzania lokalnego przez porty 9010/9020. Przy porcie 8000 obie jakości wideo będą dostępne jako osobne encje wideo. Źródło Chmura to ignoruje."
