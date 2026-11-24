@@ -185,6 +185,9 @@
       },
       "live": {
         "name": "Direct"
+      },
+      "live_sub": {
+        "name": "Direct (basse résolution)"
       }
     },
     "number": {

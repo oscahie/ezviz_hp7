@@ -185,6 +185,9 @@
       },
       "live": {
         "name": "En Vivo"
+      },
+      "live_sub": {
+        "name": "En Vivo (baja resolución)"
       }
     },
     "number": {

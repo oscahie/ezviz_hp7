@@ -185,6 +185,9 @@
       },
       "live": {
         "name": "Live"
+      },
+      "live_sub": {
+        "name": "Live (low resolution)"
       }
     },
     "number": {
