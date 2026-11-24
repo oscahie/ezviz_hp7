@@ -182,6 +182,9 @@
       },
       "live": {
         "name": "Na żywo"
+      },
+      "live_sub": {
+        "name": "Na żywo (niska rozdzielczość)"
       }
     },
     "number": {

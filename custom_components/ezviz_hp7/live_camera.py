@@ -188,10 +188,13 @@ class NetSdkLanSource:
     CHANNEL = 33
     PORT = 8000
 
-    def __init__(self, api: "Hp7Api", serial: str, code: str) -> None:
+    def __init__(
+        self, api: "Hp7Api", serial: str, code: str, stream_quality: str = "main"
+    ) -> None:
         self._api = api
         self._serial = serial
         self._code = code
+        self._stream_type = 1 if stream_quality == "sub" else 0
         self._stream: Any = None
         self._sock: Any = None
         self._closed = False
@@ -218,7 +221,9 @@ class NetSdkLanSource:
             HcNetSdkLanEndpoint(
                 serial=self._serial, host=local_ip, command_port=self.PORT
             ),
-            hcnetsdk_command_port_native_lan_live_view_plan(channel=self.CHANNEL),
+            hcnetsdk_command_port_native_lan_live_view_plan(
+                channel=self.CHANNEL, stream_type=self._stream_type
+            ),
             password=self._code,
             timeout=10.0,
             read_first_media=False,
@@ -238,7 +243,7 @@ class NetSdkLanSource:
 
     @property
     def streamssn(self) -> str:
-        return f"lan8000:{self._serial}"
+        return f"lan8000:{self._serial}" + (":sub" if self._stream_type else "")
 
     def iter_payloads(self):
         """Yield MPEG-PS bytes from the media socket, minus the IMKH header."""
@@ -1628,7 +1633,9 @@ class Hp7StreamRelay:
             )
 
         def _open_lan_sdk():
-            return NetSdkLanSource(self._api, self._serial, self._login_code)
+            return NetSdkLanSource(
+                self._api, self._serial, self._login_code, self._stream_quality
+            )
 
         if self._stream_source == "cloud":
             return await loop.run_in_executor(None, _open_cloud)
@@ -2500,6 +2507,7 @@ class Hp7LiveCamera(Camera):
         relay: Hp7StreamRelay,
         stream_mode: str = "mjpeg",
         ffmpeg_path: str = "ffmpeg",
+        sub: bool = False,
     ) -> None:
         super().__init__()
         self._serial = serial
@@ -2507,7 +2515,9 @@ class Hp7LiveCamera(Camera):
         self._relay = relay
         self._stream_mode = (stream_mode or "mjpeg").lower()
         self._ffmpeg_path = ffmpeg_path
-        self._attr_unique_id = f"{DOMAIN}_{serial}_live"
+        self._attr_unique_id = f"{DOMAIN}_{serial}_live" + ("_sub" if sub else "")
+        if sub:
+            self._attr_translation_key = "live_sub"
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -2697,9 +2707,35 @@ async def async_setup_live_entities(
         except Exception:  # noqa: BLE001
             pass
 
-    async_add_entities(
-        [Hp7LiveCamera(serial, model, relay, stream_mode=effective_mode)]
-    )
+    entities = [Hp7LiveCamera(serial, model, relay, stream_mode=effective_mode)]
+
+    # The port-8000 source can serve the sub stream (HP7 Pro: 1280x720 H.264)
+    # alongside the main one, from a second device session. Offer it as its
+    # own camera so a dashboard grid can use the light stream while the
+    # full-resolution one stays available. Being H.264 it plays over WebRTC
+    # everywhere, Firefox included.
+    if stream_source == "local_sdk" and relay._stream_quality != "sub":
+        sub_relay = Hp7StreamRelay(
+            api=api,
+            serial=serial,
+            channel=1,
+            bind_host=str(data.get("relay_bind") or "127.0.0.1"),
+            aggressive_mpegts=aggressive_mpegts,
+            video_codec="auto",
+            stream_source=stream_source,
+            stream_mode=effective_mode,
+            stream_quality="sub",
+            encryption_key=str(data.get("encryption_key") or ""),
+            verification_code=str(data.get("verification_code") or ""),
+            hass=hass,
+        )
+        await sub_relay.start()
+        data["live_relay_sub"] = sub_relay
+        entities.append(
+            Hp7LiveCamera(serial, model, sub_relay, stream_mode=effective_mode, sub=True)
+        )
+
+    async_add_entities(entities)
 
 
 async def _resolve_auto_stream_mode(relay: "Hp7StreamRelay") -> str:
@@ -2739,6 +2775,7 @@ async def async_unload_live_entities(
     data: Optional[dict[str, Any]] = hass.data.get(DOMAIN, {}).get(entry.entry_id)
     if not data:
         return
-    relay: Optional[Hp7StreamRelay] = data.pop("live_relay", None)
-    if relay is not None:
-        await relay.stop()
+    for key in ("live_relay", "live_relay_sub"):
+        relay: Optional[Hp7StreamRelay] = data.pop(key, None)
+        if relay is not None:
+            await relay.stop()
