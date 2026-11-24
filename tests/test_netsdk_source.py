@@ -268,3 +268,14 @@ def test_replay_filter_drops_the_pack_cut_short_at_the_ring_seam():
     f = PsReplayFilter()
     assert f.feed(stream) == _frame(3000) + cut + new
     assert f.bad_packs >= 1
+
+
+def test_replay_filter_drops_a_pack_with_any_stale_pts():
+    from custom_components.ezviz_hp7._pes import PsReplayFilter
+
+    f = PsReplayFilter()
+    first = _frame(12000) + _frame(12100, sid=0xC0)
+    # New audio first, but the video in the same pack is stale.
+    mixed = PACK_HEADER + _pes(0xC0, b"a", 18100) + _pes(0xE0, b"v", 6000)
+    nxt = _frame(18000)
+    assert f.feed(first + mixed + nxt + PACK_HEADER) == first + nxt
