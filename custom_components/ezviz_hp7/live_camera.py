@@ -242,8 +242,13 @@ class NetSdkLanSource:
 
     def iter_payloads(self):
         """Yield MPEG-PS bytes from the media socket, minus the IMKH header."""
+        from ._pes import PsReplayFilter
+
         synced = False
         pending = b""
+        # The old HP7 resends its whole ring buffer in a loop; keep only
+        # packs newer than what was already sent (no-op on the HP7 Pro).
+        replay = PsReplayFilter()
         while not self._closed:
             try:
                 data = self._sock.recv(65536)
@@ -261,7 +266,9 @@ class NetSdkLanSource:
                     pending = pending[-3:]
                     continue
                 data, pending, synced = pending[i:], b"", True
-            yield data
+            data = replay.feed(data)
+            if data:
+                yield data
 
     def close(self) -> None:
         self._closed = True

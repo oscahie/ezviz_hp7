@@ -171,3 +171,119 @@ class PesParser:
         self.packets_yielded += 1
         del buf[:total]
         return total
+
+
+_PTS_WRAP = 1 << 33
+_PTS_HALF = 1 << 32
+
+
+def _pes_pts(buf: bytearray, off: int, end: int) -> int | None:
+    """PTS of the PES packet at ``off`` (start code included), or None."""
+    if end - off < 14 or not buf[off + 7] & 0x80:
+        return None
+    p = buf[off + 9:off + 14]
+    return (
+        ((p[0] >> 1) & 0x07) << 30 | p[1] << 22 | (p[2] >> 1) << 15
+        | p[3] << 7 | p[4] >> 1
+    )
+
+
+class PsReplayFilter:
+    """Pass an MPEG-PS bytestream through, dropping replayed packs.
+
+    The old HP7 (CS-HP7-R100) on the port-8000 source does not stream its
+    video live: it sends its whole ~1 MiB ring buffer over and over, as
+    fast as TCP allows (measured: ~43 Mbit/s, each frame repeated ~35 times,
+    video PTS jumping back ~13 s every ~0.2 s). Fed to ffmpeg as is, the
+    picture plays at many times real speed and keeps looping. The HP7 Pro
+    sends each frame once, so for it this filter is a pass-through.
+
+    Each pack (0xBA up to the next 0xBA) is kept only if its first PES with
+    a PTS is newer than anything already sent for that stream (video and
+    audio tracked apart, 33-bit wrap handled). Packs without a PTS — the
+    continuation of a large frame — follow the decision of the pack before.
+    Payloads are never touched, so encrypted streams pass unchanged.
+    """
+
+    def __init__(self) -> None:
+        self._buf = bytearray()
+        self._pack = bytearray()  # current pack, held until decided
+        self._keep: bool | None = None  # decision for the current pack
+        self._last_keep = True
+        self._newest: dict[int, int] = {}  # 0xE0 / 0xC0 -> newest PTS sent
+        self.dropped_bytes = 0
+        self.passed_bytes = 0
+
+    def _is_new(self, kind: int, pts: int) -> bool:
+        last = self._newest.get(kind)
+        if last is not None and not 0 < (pts - last) % _PTS_WRAP < _PTS_HALF:
+            return False
+        self._newest[kind] = pts
+        return True
+
+    def _end_pack(self, out: bytearray) -> None:
+        keep = self._last_keep if self._keep is None else self._keep
+        if keep:
+            out += self._pack
+            self.passed_bytes += len(self._pack)
+        else:
+            self.dropped_bytes += len(self._pack)
+        self._pack = bytearray()
+        self._last_keep = keep
+        self._keep = None
+
+    def feed(self, data: bytes) -> bytes:
+        """Append ``data``; return the bytes that can be passed on now."""
+        buf = self._buf
+        buf += data
+        out = bytearray()
+        pos = 0
+        n = len(buf)
+        while n - pos >= 6:
+            if buf[pos] or buf[pos + 1] or buf[pos + 2] != 1:
+                idx = buf.find(b"\x00\x00\x01", pos)
+                if idx < 0:
+                    idx = max(pos, n - 2)
+                # Garbage between packets: keep it with the pack so nothing
+                # the downstream demuxer might want is lost.
+                self._pack += buf[pos:idx]
+                pos = idx
+                continue
+            sid = buf[pos + 3]
+            if sid == 0xBA:
+                if n - pos < 14:
+                    break
+                total = 14 + (buf[pos + 13] & 0x07)
+            elif sid == 0xB9:
+                total = 4
+            else:
+                length = (buf[pos + 4] << 8) | buf[pos + 5]
+                if length:
+                    total = 6 + length
+                else:
+                    idx = buf.find(b"\x00\x00\x01", pos + 6)
+                    if idx < 0:
+                        break
+                    total = idx - pos
+            if n - pos < total:
+                break
+            if sid == 0xBA:
+                self._end_pack(out)
+            elif self._keep is None and (
+                0xE0 <= sid <= 0xEF or 0xC0 <= sid <= 0xDF
+            ):
+                pts = _pes_pts(buf, pos, pos + total)
+                if pts is not None:
+                    self._keep = self._is_new(sid & 0xF0, pts)
+            self._pack += buf[pos:pos + total]
+            pos += total
+            if self._keep is not None and self._pack:
+                # Decided: stream the rest of the pack without holding it.
+                if self._keep:
+                    out += self._pack
+                    self.passed_bytes += len(self._pack)
+                else:
+                    self.dropped_bytes += len(self._pack)
+                self._pack = bytearray()
+        del buf[:pos]
+        return bytes(out)
