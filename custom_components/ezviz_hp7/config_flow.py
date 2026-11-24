@@ -506,10 +506,10 @@ class OptionsFlow(config_entries.OptionsFlow):
                     CONF_STREAM_QUALITY, default=current_quality
                 ): vol.In(STREAM_QUALITIES),
                 vol.Optional(
-                    CONF_ENCRYPTION_KEY, default=current_enc_key
+                    CONF_VERIFICATION_CODE, default=current_verify_code
                 ): str,
                 vol.Optional(
-                    CONF_VERIFICATION_CODE, default=current_verify_code
+                    CONF_ENCRYPTION_KEY, default=current_enc_key
                 ): str,
                 vol.Optional(
                     CONF_DIAGNOSTIC_DUMPS, default=current_dumps
