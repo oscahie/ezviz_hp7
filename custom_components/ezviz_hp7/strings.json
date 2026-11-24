@@ -282,7 +282,7 @@
           "monitor_serial": "Indoor monitor serial number"
         },
         "data_description": {
-          "monitor_serial": "Only for HP7 kits with an indoor monitor: its serial number (or several, comma-separated, for the two-family setup) adds a switch per monitor. Leave empty otherwise."
+          "monitor_serial": "Enter the indoor monitor serial number (or several, separated by commas, for the HP7 two-family setup) to expose a dedicated switch per monitor. Empty = no monitor."
         },
         "sections": {
           "video": {

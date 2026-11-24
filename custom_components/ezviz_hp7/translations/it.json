@@ -242,7 +242,7 @@
           "monitor_serial": "Numero di serie del monitor interno"
         },
         "data_description": {
-          "monitor_serial": "Solo per kit HP7 con monitor interno: il suo numero di serie (o più numeri separati da virgola, per l'HP7 bifamigliare) aggiunge uno switch per monitor. Altrimenti lascia vuoto."
+          "monitor_serial": "Inserisci il numero di serie del monitor interno (o più numeri separati da virgola per HP7 bifamigliare) per esporre uno switch dedicato per ogni monitor. Vuoto = nessun monitor."
         },
         "sections": {
           "video": {

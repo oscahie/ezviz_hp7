@@ -282,7 +282,7 @@
           "monitor_serial": "Número de serie del monitor interior"
         },
         "data_description": {
-          "monitor_serial": "Solo para kits HP7 con monitor interior: su número de serie (o varios separados por comas, para el HP7 bifamiliar) añade un interruptor por monitor. Si no, déjalo vacío."
+          "monitor_serial": "Introduce el número de serie del monitor interior (o varios separados por comas para HP7 bifamiliar) para exponer un interruptor por cada monitor. Vacío = sin monitor."
         },
         "sections": {
           "video": {
