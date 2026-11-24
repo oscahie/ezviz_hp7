@@ -861,11 +861,13 @@ class Hp7StreamRelay:
         # dir so misframed NAL payloads (HPD5) can be hex-inspected without
         # a packet capture.
         self._diagnostic_dumps = bool(diagnostic_dumps)
-        self._configured_key = (encryption_key or "").strip()
-        # Port-8000 login: the label's verification code, or the encryption
-        # key when no separate code is configured (the two are the same until
-        # the video encryption password is changed in the app).
-        self._login_code = (verification_code or "").strip() or self._configured_key
+        # The label's verification code is both the port-8000 login and the
+        # video encryption password, until the password is changed in the
+        # app: then the new one goes in the encryption key option. Either
+        # field alone covers the other for the common unchanged case.
+        code = (verification_code or "").strip()
+        self._configured_key = (encryption_key or "").strip() or code
+        self._login_code = code or self._configured_key
         # The decoder syncs encrypted streams on a keyframe (PSM), so ffmpeg
         # gets the codec parameters right away. A long probe there only
         # buffers video, and a slow host never catches up on that delay.
@@ -1328,7 +1330,7 @@ class Hp7StreamRelay:
                 "Hp7StreamRelay: the stream is encrypted but no key is "
                 "available (serial=%s). The cloud only hands the key out "
                 "after 2FA elevation, so enter the device's 6-character "
-                "verification code in Configure -> 'Encryption key' and it "
+                "verification code in Configure -> 'Verification code' and it "
                 "will be used directly.",
                 self._serial,
             )
