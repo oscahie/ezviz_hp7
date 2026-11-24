@@ -330,7 +330,7 @@
     "stream_source": {
       "options": {
         "cloud": "Cloud : relais VTM EZVIZ",
-        "local": "Local, LAN : direct, contourne le cloud. Corrige « pas de direct » sur les firmwares qui n'émettent pas vers le cloud ; nécessite HA sur le même réseau que le portier",
+        "local": "Local, ports 9010/9020 de l'appareil : HA doit être sur le même LAN que le portier. Peut encore nécessiter un appel à l'API cloud pour obtenir la clé du flux. Corrige « pas de direct » sur les firmwares qui n'émettent pas vers le cloud",
         "local_sdk": "Local, port 8000 : LAN directe, se connecte avec le code de vérification. Fonctionne avec les comptes avec lesquels le portier est seulement partagé ; ajoute toujours une seconde caméra basse résolution",
         "auto": "Auto : essaie local puis cloud"
       }

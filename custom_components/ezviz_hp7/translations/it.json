@@ -330,7 +330,7 @@
     "stream_source": {
       "options": {
         "cloud": "Cloud: relay VTM EZVIZ",
-        "local": "Locale, LAN: diretto, bypassa il cloud. Risolve 'live assente' sui firmware che non inviano al cloud; richiede HA sulla stessa rete del citofono",
+        "local": "Locale, porte 9010/9020 del dispositivo: HA deve essere sulla stessa LAN del citofono. Può comunque servire una chiamata all'API cloud per ottenere la chiave dello stream. Risolve 'live assente' sui firmware che non inviano al cloud",
         "local_sdk": "Locale, porta 8000: LAN diretta, accede con il codice di verifica. Funziona con account con cui il citofono è solo condiviso; aggiunge sempre una seconda telecamera a bassa risoluzione",
         "auto": "Auto: prova locale poi cloud"
       }

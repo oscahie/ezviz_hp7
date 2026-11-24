@@ -330,7 +330,7 @@
     "stream_source": {
       "options": {
         "cloud": "Chmura: przekaźnik VTM EZVIZ",
-        "local": "Lokalnie, LAN: bezpośrednio, omija chmurę. Naprawia 'brak podglądu' na oprogramowaniu, które nie wysyła do chmury; wymaga HA w tej samej sieci co wideodomofon",
+        "local": "Lokalnie, porty 9010/9020 urządzenia: HA musi być w tej samej sieci LAN co wideodomofon. Może nadal wymagać wywołania API chmury, aby pobrać klucz strumienia. Naprawia 'brak podglądu' na oprogramowaniu, które nie wysyła do chmury",
         "local_sdk": "Lokalnie, port 8000: bezpośrednio w LAN, loguje się kodem weryfikacyjnym. Działa na kontach, którym wideodomofon jest tylko udostępniony; zawsze dodaje drugą kamerę w niskiej rozdzielczości",
         "auto": "Auto: najpierw lokalnie, potem chmura"
       }
