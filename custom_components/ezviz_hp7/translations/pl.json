@@ -242,7 +242,7 @@
           "monitor_serial": "Numer seryjny monitora wewnętrznego"
         },
         "data_description": {
-          "monitor_serial": "Tylko dla zestawów HP7 z monitorem wewnętrznym: jego numer (lub kilka, oddzielonych przecinkami, dla wersji dwurodzinnej) dodaje przełącznik dla każdego monitora. W przeciwnym razie pozostaw puste."
+          "monitor_serial": "Tylko dla zestawów HP7 z monitorem wewnętrznym: jego numer seryjny (lub kilka, oddzielonych przecinkami, dla wersji dwurodzinnej) dodaje przełącznik dla każdego monitora. W przeciwnym razie pozostaw puste."
         },
         "sections": {
           "video": {

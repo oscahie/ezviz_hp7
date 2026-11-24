@@ -279,10 +279,10 @@
         "title": "EZVIZ HP7 / CP7 options",
         "description": "Settings for this doorbell. Each option explains itself below it; the advanced section can usually be left as is.",
         "data": {
-          "monitor_serial": "Indoor monitor serial"
+          "monitor_serial": "Indoor monitor serial number"
         },
         "data_description": {
-          "monitor_serial": "Only for HP7 kits with an indoor monitor: its serial (or several, comma-separated, for the two-family setup) adds a switch per monitor. Leave empty otherwise."
+          "monitor_serial": "Only for HP7 kits with an indoor monitor: its serial number (or several, comma-separated, for the two-family setup) adds a switch per monitor. Leave empty otherwise."
         },
         "sections": {
           "video": {

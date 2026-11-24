@@ -239,10 +239,10 @@
         "title": "Opzioni EZVIZ HP7 / CP7",
         "description": "Impostazioni di questo citofono. Ogni opzione è spiegata sotto di sé; la sezione avanzata di solito si può lasciare com'è.",
         "data": {
-          "monitor_serial": "Serial monitor interno"
+          "monitor_serial": "Numero di serie del monitor interno"
         },
         "data_description": {
-          "monitor_serial": "Solo per kit HP7 con monitor interno: il suo serial (o più serial separati da virgola, per l'HP7 bifamigliare) aggiunge uno switch per monitor. Altrimenti lascia vuoto."
+          "monitor_serial": "Solo per kit HP7 con monitor interno: il suo numero di serie (o più numeri separati da virgola, per l'HP7 bifamigliare) aggiunge uno switch per monitor. Altrimenti lascia vuoto."
         },
         "sections": {
           "video": {

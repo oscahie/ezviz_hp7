@@ -242,7 +242,7 @@
           "monitor_serial": "Numéro de série du moniteur intérieur"
         },
         "data_description": {
-          "monitor_serial": "Uniquement pour les kits HP7 avec moniteur intérieur : son numéro (ou plusieurs, séparés par des virgules, pour le HP7 bi-famille) ajoute un interrupteur par moniteur. Sinon, laissez vide."
+          "monitor_serial": "Uniquement pour les kits HP7 avec moniteur intérieur : son numéro de série (ou plusieurs, séparés par des virgules, pour le HP7 bi-famille) ajoute un interrupteur par moniteur. Sinon, laissez vide."
         },
         "sections": {
           "video": {

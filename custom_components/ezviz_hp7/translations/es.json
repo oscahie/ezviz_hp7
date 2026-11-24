@@ -279,10 +279,10 @@
         "title": "Opciones EZVIZ HP7 / CP7",
         "description": "Ajustes de este videoportero. Cada opción se explica debajo de ella; la sección avanzada normalmente se puede dejar como está.",
         "data": {
-          "monitor_serial": "Serial del monitor interior"
+          "monitor_serial": "Número de serie del monitor interior"
         },
         "data_description": {
-          "monitor_serial": "Solo para kits HP7 con monitor interior: su serial (o varios separados por comas, para el HP7 bifamiliar) añade un interruptor por monitor. Si no, déjalo vacío."
+          "monitor_serial": "Solo para kits HP7 con monitor interior: su número de serie (o varios separados por comas, para el HP7 bifamiliar) añade un interruptor por monitor. Si no, déjalo vacío."
         },
         "sections": {
           "video": {
