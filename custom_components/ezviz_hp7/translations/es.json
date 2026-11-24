@@ -371,7 +371,7 @@
       "options": {
         "cloud": "Nube: relay VTM de EZVIZ",
         "local": "Local, puertos 9010/9020 del dispositivo: HA debe estar en la misma LAN que el videoportero. Puede seguir necesitando una llamada a la API de la nube para obtener la clave del stream. Arregla 'sin directo' en firmware que no envía a la nube",
-        "local_sdk": "Local, puerto 8000: LAN directa, inicia sesión con el código de verificación. Funciona con cuentas con las que el portero solo está compartido; añade siempre una segunda cámara de baja resolución",
+        "local_sdk": "Local, puerto 8000 del dispositivo. HA debe estar en la misma LAN que el videoportero. No necesita la nube para nada. En los videoporteros 4K puede dar a la vez el stream de alta y el de baja resolución. También funciona con cuentas con las que el videoportero solo está compartido.",
         "auto": "Auto: prueba local y luego la nube"
       }
     },

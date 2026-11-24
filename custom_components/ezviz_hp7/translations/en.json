@@ -371,7 +371,7 @@
       "options": {
         "cloud": "Cloud: EZVIZ VTM relay",
         "local": "Local, ports 9010/9020 of the device: HA must be on the same LAN as the doorbell. May still need a cloud API call to get the stream key. Fixes 'no live' on firmware that won't push to the cloud",
-        "local_sdk": "Local, port 8000: direct LAN, logs in with the verification code. Works on accounts the doorbell is only shared with; always adds a second, low-resolution camera",
+        "local_sdk": "Local, port 8000 of the device. HA must be on the same LAN as the doorbell. It doesn't need the cloud at all. On 4K doorbells it can do both high-res and low-res streams simultaneously. It also works on accounts the doorbell is only shared with.",
         "auto": "Auto: try local, then cloud"
       }
     },
