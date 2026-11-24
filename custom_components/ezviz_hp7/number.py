@@ -146,14 +146,13 @@ class _RingtoneBase(CoordinatorEntity, NumberEntity):
     """Shared scaffolding for the ringtone selectors.
 
     The HP7 firmware reports the active ringtone as an integer index. The
-    exact upper bound varies by firmware, so we expose a generous slider
-    (0-15) and rely on the device to silently accept the highest supported
-    value. If your firmware ignores values above N, just stay within range.
+    EZVIZ app lists 20 ringtones ("Sound 1" to "Sound 20", indexes 0-19),
+    so the slider covers 0-19.
     """
 
     _attr_has_entity_name = True
     _attr_native_min_value = 0
-    _attr_native_max_value = 15
+    _attr_native_max_value = 19
     _attr_native_step = 1
     _attr_mode = NumberMode.SLIDER
 
