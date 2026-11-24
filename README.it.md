@@ -98,12 +98,12 @@ Rimuovi i dispositivi inutilizzati per liberare almeno uno slot.
 
 1. Apri Home Assistant
 2. Vai su **HACS → Integrazioni → Repository personalizzati**
-3. Aggiungi `https://github.com/Bobsilvio/ezviz_hp7` con tipo `Integration`
+3. Aggiungi `https://github.com/oscahie/ezviz_hp7` con tipo `Integration`
 4. Cerca `Ezviz Hp7` e installa
 5. Riavvia Home Assistant
 6. Vai su **Impostazioni → Dispositivi e servizi** e aggiungi l'integrazione
 
-[![Apri in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=bobsilvio&repository=ezviz_hp7&category=integration)
+[![Apri in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=oscahie&repository=ezviz_hp7&category=integration)
 
 ---
 
