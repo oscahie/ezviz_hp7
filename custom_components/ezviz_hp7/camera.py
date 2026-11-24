@@ -13,7 +13,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.config_entries import ConfigEntry
 
-from .const import CONF_ENCRYPTION_KEY, DOMAIN
+from .const import CONF_ENCRYPTION_KEY, CONF_VERIFICATION_CODE, DOMAIN
 from .pylocalapi.constants import HIK_ENCRYPTION_HEADER
 from .pylocalapi.utils import decrypt_image
 
@@ -97,7 +97,13 @@ class Hp7LastSnapshotCamera(Camera, CoordinatorEntity):
         if self._entry is None:
             return ""
         merged = {**self._entry.data, **self._entry.options}
-        return str(merged.get(CONF_ENCRYPTION_KEY) or "").strip()
+        # The label's verification code is the password until it is changed
+        # in the app (then the new one is in the encryption key option).
+        return str(
+            merged.get(CONF_ENCRYPTION_KEY)
+            or merged.get(CONF_VERIFICATION_CODE)
+            or ""
+        ).strip()
 
     @property
     def device_info(self) -> DeviceInfo:

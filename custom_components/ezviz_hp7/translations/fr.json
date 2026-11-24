@@ -244,9 +244,13 @@
           "stream_source": "Source du flux (cloud = relais VTM EZVIZ ; local = LAN directe, contourne le cloud et corrige 'pas de direct' sur les firmwares qui n'émettent pas vers le cloud — nécessite HA sur le même réseau que le portier ; local_sdk = direct LAN on port 8000, logs in with the verification code below; works on accounts the doorbell is only shared with; auto = essaie local puis cloud)",
           "stream_mode": "Mode de diffusion (auto = par défaut : détecte le codec et choisit tout seul — H.264 → webrtc, HEVC → mjpeg ; webrtc = HA Stream/go2rtc, avec audio + faible latence mais n'affiche pas le HEVC sans transcodage ; mjpeg = ffmpeg par spectateur en motion-JPEG, agnostique au codec et robuste pour HEVC/multi-spectateur mais sans audio)",
           "stream_quality": "Qualité du flux LAN (main = pleine résolution ; sub = flux secondaire basse résolution de l'appareil, bien moins coûteux à décoder — à utiliser si la vidéo accumule du retard sur un hôte peu puissant comme un Raspberry Pi. Uniquement pour la source « local »)",
-          "encryption_key": "Clé de chiffrement (le code de vérification à 6 caractères de l'appareil, sur son étiquette). Nécessaire uniquement si le portier chiffre la vidéo et que le cloud ne fournit pas la clé : elle sert alors à déchiffrer le flux, pour avoir le direct sans désactiver le chiffrement.",
-          "verification_code": "Verification code (the 6 letters on the device label). Used to log in for the 'local_sdk' source; leave empty to use the encryption key. Changing the video encryption password in the app does not change this code.",
+          "verification_code": "Code de vérification",
+          "encryption_key": "Mot de passe de chiffrement vidéo",
           "diagnostic_dumps": "Vidages de diagnostic (écrit deux fichiers .bin dans /config capturant le début du flux, pour analyse lors d'un signalement de problème vidéo. Laissez sur OFF : inutile en usage normal)"
+        },
+        "data_description": {
+          "verification_code": "Les 6 lettres de l'étiquette de l'appareil. Sert à se connecter avec la source 'local_sdk' et à déchiffrer la vidéo tant que le chiffrement utilise le code de l'étiquette.",
+          "encryption_key": "Uniquement si vous avez changé le mot de passe de chiffrement vidéo dans l'app EZVIZ. Sinon, laissez vide."
         }
       }
     }
