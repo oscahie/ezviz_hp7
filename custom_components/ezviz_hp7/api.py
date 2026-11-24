@@ -192,6 +192,33 @@ class Hp7Api:
             _LOGGER.warning("EZVIZ HP7: forced re-login failed: %s", exc)
             return False
 
+    def start_channel99(
+        self,
+        state: dict[str, Any],
+        save_state: Any,
+        on_message: Any,
+    ) -> Any:
+        """Start the channel-99 long link (calls + alarms) and return it.
+
+        Uses its own Android-profile login with the stored password, so the
+        main session is untouched. Raises ``Channel99Error`` (or a network
+        error) when the account can't use it. Blocking; run in an executor.
+        """
+        from .channel99 import Channel99Error, Channel99Push
+
+        if not self._username or not self._password:
+            raise Channel99Error("no stored password for the app-profile login")
+        host = (self._token or {}).get("api_url") or self._url
+        push = Channel99Push(
+            self._username, self._password, host, state, save_state, on_message
+        )
+        try:
+            push.start()
+        except Exception:
+            push.stop()
+            raise
+        return push
+
     def start_push(self, on_message: Any) -> Any:
         """Connect to the EZVIZ push (MQTT) service and return the client.
 
@@ -566,6 +593,12 @@ class Hp7Api:
             serial, DEFAULT_DOOR_LOCK_NO
         )
 
+    # Range of the ChimeMusic ``volume`` field. The app's slider goes to 100
+    # and the HP7 Pro door station refuses 101. On the Pro door station this
+    # is the same setting as CustomVoice_Volume, so it also sets how loud the
+    # unlock beep is (the old 0-7 cap left it almost silent).
+    VOLUME_MAX = 100
+
     _CHIME_DEFAULTS = {
         "doorbell": 10,
         "pir": 0,
@@ -727,7 +760,7 @@ class Hp7Api:
         return config.get("doorbell_enable") in (1, "1", True)
 
     def get_chime_volume(self, serial: str) -> int | None:
-        """Return chime volume (0-7), or None on error."""
+        """Return chime volume (0-VOLUME_MAX), or None on error."""
         config = self._get_chime_config(serial)
         if config is None:
             return None
@@ -737,11 +770,11 @@ class Hp7Api:
             return None
 
     def set_chime_volume(self, serial: str, volume: int) -> bool:
-        """Set ChimeMusic volume (0-7), preserving other fields."""
+        """Set ChimeMusic volume (0-VOLUME_MAX), preserving other fields."""
         self.ensure_client()
         if not self._client:
             return False
-        volume = max(0, min(7, int(volume)))
+        volume = max(0, min(self.VOLUME_MAX, int(volume)))
         current = self._get_chime_config(serial) or {}
         config = {**self._CHIME_DEFAULTS, **current, "volume": volume}
         value = json.dumps(config, separators=(",", ":"))
@@ -753,6 +786,7 @@ class Hp7Api:
         try:
             resp = self._client._session.put(url, params=params, timeout=15)
             resp.raise_for_status()
+            self._chime_config_cache.pop(serial, None)
             return True
         except (RequestException, ValueError) as exc:
             _LOGGER.error("EZVIZ HP7: set_chime_volume failed: %s", exc)

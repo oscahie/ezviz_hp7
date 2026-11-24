@@ -12,6 +12,10 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
+# Indoor monitor ChimeMusic volume stays on the old 0-7 scale: only the door
+# station's 0-100 range has been checked on hardware.
+MONITOR_VOLUME_MAX = 7
+
 
 async def async_setup_entry(hass, entry, async_add_entities):
     """Set up EZVIZ HP7/CP7 number entities."""
@@ -71,11 +75,15 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 
 class EzvizHp7ChimeVolume(CoordinatorEntity, NumberEntity):
-    """Slider 0-7 for the ChimeMusic ``volume`` field."""
+    """Slider for the ChimeMusic ``volume`` field.
+
+    Door station: 0-100, the app's scale (the HP7 Pro door refuses 101).
+    Indoor monitor: kept at 0-7 until its range is checked on hardware.
+    """
 
     _attr_has_entity_name = True
     _attr_native_min_value = 0
-    _attr_native_max_value = 7
+    _attr_native_max_value = 100
     _attr_native_step = 1
     _attr_mode = NumberMode.SLIDER
 
@@ -96,6 +104,8 @@ class EzvizHp7ChimeVolume(CoordinatorEntity, NumberEntity):
         self._value_key = value_key
         self._attr_translation_key = translation_key
         self._attr_unique_id = f"{DOMAIN}_{serial}_{translation_key}"
+        if value_key != "chime_volume":
+            self._attr_native_max_value = MONITOR_VOLUME_MAX
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -118,7 +128,7 @@ class EzvizHp7ChimeVolume(CoordinatorEntity, NumberEntity):
             return None
 
     async def async_set_native_value(self, value: float) -> None:
-        target = max(0, min(7, int(round(value))))
+        target = max(0, min(int(self._attr_native_max_value), int(round(value))))
         ok = await self.hass.async_add_executor_job(
             self._api.set_chime_volume, self._serial, target
         )
@@ -136,14 +146,13 @@ class _RingtoneBase(CoordinatorEntity, NumberEntity):
     """Shared scaffolding for the ringtone selectors.
 
     The HP7 firmware reports the active ringtone as an integer index. The
-    exact upper bound varies by firmware, so we expose a generous slider
-    (0-15) and rely on the device to silently accept the highest supported
-    value. If your firmware ignores values above N, just stay within range.
+    EZVIZ app lists 20 ringtones ("Sound 1" to "Sound 20", indexes 0-19),
+    so the slider covers 0-19.
     """
 
     _attr_has_entity_name = True
     _attr_native_min_value = 0
-    _attr_native_max_value = 15
+    _attr_native_max_value = 19
     _attr_native_step = 1
     _attr_mode = NumberMode.SLIDER
 
