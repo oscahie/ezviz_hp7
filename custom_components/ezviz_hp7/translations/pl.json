@@ -242,27 +242,25 @@
           "monitor_serial": "Numer seryjny monitora wewnętrznego"
         },
         "data_description": {
-          "monitor_serial": "Tylko dla zestawów HP7 z monitorem wewnętrznym: jego numer (lub kilka, oddzielonych przecinkami, dla wersji dwurodzinnej) dodaje przełącznik dla każdego monitora. W przeciwnym razie pozostaw puste."
+          "monitor_serial": "Wprowadź numer seryjny monitora wewnętrznego (lub kilka numerów oddzielonych przecinkami dla konfiguracji dwurodzinnej HP7), aby udostępnić dedykowany przełącznik dla każdego monitora. Puste pole = brak monitora."
         },
         "sections": {
           "video": {
             "name": "Obraz na żywo",
-            "description": "Skąd pochodzi podgląd na żywo i jak trafia do przeglądarki.",
             "data": {
               "stream_source": "Źródło strumienia",
               "verification_code": "Kod weryfikacyjny",
               "encryption_key": "Hasło szyfrowania wideo",
               "stream_quality": "Jakość strumienia LAN",
-              "stream_mode": "Dostarczanie podglądu",
+              "stream_mode": "Protokół odtwarzania",
               "video_codec": "Kodek wideo"
             },
             "data_description": {
               "stream_source": "Skąd Home Assistant pobiera obraz na żywo.",
-              "verification_code": "6 liter z etykiety urządzenia. Służy do logowania w źródle 'Lokalnie, port 8000' i do odszyfrowania wideo, dopóki szyfrowanie używa kodu z etykiety.",
+              "verification_code": "6 liter z etykiety urządzenia. Może być potrzebny do logowania i/lub odszyfrowania wideo, zależnie od trybu.",
               "encryption_key": "Tylko jeśli zmieniono hasło szyfrowania wideo w aplikacji EZVIZ. W przeciwnym razie pozostaw puste.",
-              "stream_quality": "Używana tylko przez źródło 'Lokalnie, LAN'. 'Lokalnie, port 8000' zawsze tworzy obie kamery, a chmura zawsze podaje pełną rozdzielczość.",
-              "stream_mode": "Jak obraz trafia do przeglądarki.",
-              "video_codec": "Co przekaźnik robi z obrazem przed przekazaniem dalej."
+              "stream_quality": "Dotyczy tylko odtwarzania lokalnego przez porty 9010/9020. Przy porcie 8000 obie jakości wideo będą dostępne jako osobne encje wideo. Źródło Chmura to ignoruje.",
+              "stream_mode": "Jak obraz trafia do przeglądarki."
             }
           },
           "advanced": {
@@ -335,8 +333,8 @@
     "stream_source": {
       "options": {
         "cloud": "Chmura: przekaźnik VTM EZVIZ",
-        "local": "Lokalnie, LAN: bezpośrednio, omija chmurę. Naprawia 'brak podglądu' na oprogramowaniu, które nie wysyła do chmury; wymaga HA w tej samej sieci co wideodomofon",
-        "local_sdk": "Lokalnie, port 8000: bezpośrednio w LAN, loguje się kodem weryfikacyjnym. Działa na kontach, którym wideodomofon jest tylko udostępniony; zawsze dodaje drugą kamerę w niskiej rozdzielczości",
+        "local": "Lokalnie, porty 9010/9020 urządzenia: HA musi być w tej samej sieci LAN co wideodomofon. Może nadal wymagać wywołania API chmury, aby pobrać klucz strumienia. Naprawia 'brak podglądu' na oprogramowaniu, które nie wysyła do chmury",
+        "local_sdk": "Lokalnie, port 8000 urządzenia. HA musi być w tej samej sieci LAN co wideodomofon. W ogóle nie potrzebuje chmury. Na wideodomofonach 4K może jednocześnie dostarczać strumień w wysokiej i niskiej rozdzielczości. Działa też na kontach, którym wideodomofon jest tylko udostępniony.",
         "auto": "Auto: najpierw lokalnie, potem chmura"
       }
     },
@@ -357,8 +355,8 @@
       "options": {
         "auto": "Auto (domyślnie): wykrywa kodek",
         "h264": "H.264",
-        "hevc": "HEVC → H.264: transkoduje H.265 na H.264 dla WebRTC",
-        "hevc_copy": "HEVC bez zmian: przekazuje H.265 nietknięty, dla słabych hostów, Frigate lub Safari"
+        "hevc": "HEVC → H.264: przy WebRTC transkoduje HEVC na H.264 (może źle działać na słabych hostach). MJPEG dekoduje HEVC bezpośrednio.",
+        "hevc_copy": "HEVC bez zmian: przekazuje H.265 nietknięty, dla słabych hostów, Frigate lub Safari. Przy WebRTC przeglądarka musi obsługiwać HEVC; MJPEG dekoduje go na hoście."
       }
     }
   }

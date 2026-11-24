@@ -279,30 +279,28 @@
         "title": "Opciones EZVIZ HP7 / CP7",
         "description": "Ajustes de este videoportero. Cada opción se explica debajo de ella; la sección avanzada normalmente se puede dejar como está.",
         "data": {
-          "monitor_serial": "Serial del monitor interior"
+          "monitor_serial": "Número de serie del monitor interior"
         },
         "data_description": {
-          "monitor_serial": "Solo para kits HP7 con monitor interior: su serial (o varios separados por comas, para el HP7 bifamiliar) añade un interruptor por monitor. Si no, déjalo vacío."
+          "monitor_serial": "Introduce el número de serie del monitor interior (o varios separados por comas para HP7 bifamiliar) para exponer un interruptor por cada monitor. Vacío = sin monitor."
         },
         "sections": {
           "video": {
             "name": "Vídeo en directo",
-            "description": "De dónde sale el directo y cómo llega al navegador.",
             "data": {
               "stream_source": "Fuente del stream",
               "verification_code": "Código de verificación",
               "encryption_key": "Contraseña de cifrado de vídeo",
               "stream_quality": "Calidad del stream LAN",
-              "stream_mode": "Modo de visualización",
+              "stream_mode": "Protocolo de reproducción",
               "video_codec": "Códec de vídeo"
             },
             "data_description": {
               "stream_source": "De dónde saca Home Assistant el vídeo en directo.",
-              "verification_code": "Las 6 letras de la etiqueta del dispositivo. Sirve para iniciar sesión con la fuente 'Local, puerto 8000' y para descifrar el vídeo mientras el cifrado use el código de la etiqueta.",
+              "verification_code": "Las 6 letras de la etiqueta del dispositivo. Puede ser necesario para iniciar sesión y/o para descifrar el vídeo, según el modo.",
               "encryption_key": "Solo si cambiaste la contraseña de cifrado de vídeo en la app EZVIZ. Si no, déjalo vacío.",
-              "stream_quality": "Solo la usa la fuente 'Local, LAN'. 'Local, puerto 8000' crea siempre las dos cámaras y la nube siempre da resolución completa.",
-              "stream_mode": "Cómo llega el vídeo al navegador.",
-              "video_codec": "Qué hace el relay con el vídeo antes de entregarlo."
+              "stream_quality": "Solo aplica a la reproducción local por los puertos 9010/9020. Con el puerto 8000, las dos calidades de vídeo estarán disponibles como entidades de vídeo separadas. La fuente Nube lo ignora.",
+              "stream_mode": "Cómo llega el vídeo al navegador."
             }
           },
           "advanced": {
@@ -375,8 +373,8 @@
     "stream_source": {
       "options": {
         "cloud": "Nube: relay VTM de EZVIZ",
-        "local": "Local, LAN: directo, evita la nube. Arregla 'sin directo' en firmware que no envía a la nube; requiere HA en la misma red que el videoportero",
-        "local_sdk": "Local, puerto 8000: LAN directa, inicia sesión con el código de verificación. Funciona con cuentas con las que el portero solo está compartido; añade siempre una segunda cámara de baja resolución",
+        "local": "Local, puertos 9010/9020 del dispositivo: HA debe estar en la misma LAN que el videoportero. Puede seguir necesitando una llamada a la API de la nube para obtener la clave del stream. Arregla 'sin directo' en firmware que no envía a la nube",
+        "local_sdk": "Local, puerto 8000 del dispositivo. HA debe estar en la misma LAN que el videoportero. No necesita la nube para nada. En los videoporteros 4K puede dar a la vez el stream de alta y el de baja resolución. También funciona con cuentas con las que el videoportero solo está compartido.",
         "auto": "Auto: prueba local y luego la nube"
       }
     },
@@ -397,8 +395,8 @@
       "options": {
         "auto": "Auto (por defecto): detecta el códec",
         "h264": "H.264",
-        "hevc": "HEVC → H.264: transcodifica H.265 a H.264 para WebRTC",
-        "hevc_copy": "HEVC sin tocar: pasa el H.265 tal cual, para hosts poco potentes, Frigate o Safari"
+        "hevc": "HEVC → H.264: con WebRTC, transcodifica HEVC a H.264 (puede no ir bien en hosts poco potentes). MJPEG decodifica el HEVC directamente.",
+        "hevc_copy": "HEVC sin tocar: pasa el H.265 tal cual, para hosts poco potentes, Frigate o Safari. Con WebRTC, el navegador debe soportar HEVC; MJPEG lo decodifica en el host."
       }
     }
   }

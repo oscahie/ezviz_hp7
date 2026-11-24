@@ -279,30 +279,28 @@
         "title": "EZVIZ HP7 / CP7 options",
         "description": "Settings for this doorbell. Each option explains itself below it; the advanced section can usually be left as is.",
         "data": {
-          "monitor_serial": "Indoor monitor serial"
+          "monitor_serial": "Indoor monitor serial number"
         },
         "data_description": {
-          "monitor_serial": "Only for HP7 kits with an indoor monitor: its serial (or several, comma-separated, for the two-family setup) adds a switch per monitor. Leave empty otherwise."
+          "monitor_serial": "Enter the indoor monitor serial number (or several, separated by commas, for the HP7 two-family setup) to expose a dedicated switch per monitor. Empty = no monitor."
         },
         "sections": {
           "video": {
             "name": "Live video",
-            "description": "Where the live view comes from and how it reaches the browser.",
             "data": {
               "stream_source": "Stream source",
               "verification_code": "Verification code",
               "encryption_key": "Video encryption password",
               "stream_quality": "LAN stream quality",
-              "stream_mode": "Live view delivery",
+              "stream_mode": "Playback protocol",
               "video_codec": "Video codec"
             },
             "data_description": {
               "stream_source": "Where Home Assistant gets the live video from.",
-              "verification_code": "The 6 letters on the device label. Logs in for the 'Local, port 8000' source and decrypts the video while encryption uses the label code.",
+              "verification_code": "The 6 letters on the device label. May be needed for log-in and/or to decrypt the video, depending on the mode.",
               "encryption_key": "Only if you changed the video encryption password in the EZVIZ app. Leave empty otherwise.",
-              "stream_quality": "Only used by the 'Local, LAN' source. 'Local, port 8000' always creates both cameras, and the cloud always serves full resolution.",
-              "stream_mode": "How the video reaches the browser.",
-              "video_codec": "What the relay does with the video before passing it on."
+              "stream_quality": "Applicable only to local playback via ports 9010/9020. When port 8000 is used, both video qualities will be available as separate video entities. Ignored by the Cloud source.",
+              "stream_mode": "How the video reaches the browser."
             }
           },
           "advanced": {
@@ -375,8 +373,8 @@
     "stream_source": {
       "options": {
         "cloud": "Cloud: EZVIZ VTM relay",
-        "local": "Local, LAN: direct, bypasses the cloud. Fixes 'no live' on firmware that won't push to the cloud; needs HA on the same network as the doorbell",
-        "local_sdk": "Local, port 8000: direct LAN, logs in with the verification code. Works on accounts the doorbell is only shared with; always adds a second, low-resolution camera",
+        "local": "Local, ports 9010/9020 of the device: HA must be on the same LAN as the doorbell. May still need a cloud API call to get the stream key. Fixes 'no live' on firmware that won't push to the cloud",
+        "local_sdk": "Local, port 8000 of the device. HA must be on the same LAN as the doorbell. It doesn't need the cloud at all. On 4K doorbells it can do both high-res and low-res streams simultaneously. It also works on accounts the doorbell is only shared with.",
         "auto": "Auto: try local, then cloud"
       }
     },
@@ -397,8 +395,8 @@
       "options": {
         "auto": "Auto (default): detect the codec",
         "h264": "H.264",
-        "hevc": "HEVC → H.264: transcodes H.265 to H.264 for WebRTC",
-        "hevc_copy": "HEVC passthrough: passes H.265 untouched, for low-power hosts, Frigate or Safari"
+        "hevc": "HEVC → H.264: with WebRTC, transcodes HEVC to H.264 (might not work well on low-power hosts). MJPEG decodes HEVC directly.",
+        "hevc_copy": "HEVC passthrough: passes H.265 untouched, for low-power hosts, Frigate or Safari. With WebRTC, the browser must support HEVC; MJPEG decodes it on the host."
       }
     }
   }

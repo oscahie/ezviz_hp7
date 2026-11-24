@@ -242,27 +242,25 @@
           "monitor_serial": "Numéro de série du moniteur intérieur"
         },
         "data_description": {
-          "monitor_serial": "Uniquement pour les kits HP7 avec moniteur intérieur : son numéro (ou plusieurs, séparés par des virgules, pour le HP7 bi-famille) ajoute un interrupteur par moniteur. Sinon, laissez vide."
+          "monitor_serial": "Saisissez le numéro de série du moniteur intérieur (ou plusieurs séparés par virgules pour HP7 bi-famille) pour exposer un interrupteur par moniteur. Vide = aucun moniteur."
         },
         "sections": {
           "video": {
             "name": "Vidéo en direct",
-            "description": "D'où vient le direct et comment il arrive au navigateur.",
             "data": {
               "stream_source": "Source du flux",
               "verification_code": "Code de vérification",
               "encryption_key": "Mot de passe de chiffrement vidéo",
               "stream_quality": "Qualité du flux LAN",
-              "stream_mode": "Mode de diffusion",
+              "stream_mode": "Protocole de lecture",
               "video_codec": "Codec vidéo"
             },
             "data_description": {
               "stream_source": "D'où Home Assistant récupère la vidéo en direct.",
-              "verification_code": "Les 6 lettres de l'étiquette de l'appareil. Sert à se connecter avec la source « Local, port 8000 » et à déchiffrer la vidéo tant que le chiffrement utilise le code de l'étiquette.",
+              "verification_code": "Les 6 lettres de l'étiquette de l'appareil. Peut être nécessaire pour la connexion et/ou pour déchiffrer la vidéo, selon le mode.",
               "encryption_key": "Uniquement si vous avez changé le mot de passe de chiffrement vidéo dans l'app EZVIZ. Sinon, laissez vide.",
-              "stream_quality": "Utilisée uniquement par la source « Local, LAN ». « Local, port 8000 » crée toujours les deux caméras et le cloud sert toujours la pleine résolution.",
-              "stream_mode": "Comment la vidéo arrive au navigateur.",
-              "video_codec": "Ce que fait le relais avec la vidéo avant de la transmettre."
+              "stream_quality": "Ne s'applique qu'à la lecture locale via les ports 9010/9020. Avec le port 8000, les deux qualités vidéo seront disponibles comme entités vidéo séparées. Ignoré par la source Cloud.",
+              "stream_mode": "Comment la vidéo arrive au navigateur."
             }
           },
           "advanced": {
@@ -335,8 +333,8 @@
     "stream_source": {
       "options": {
         "cloud": "Cloud : relais VTM EZVIZ",
-        "local": "Local, LAN : direct, contourne le cloud. Corrige « pas de direct » sur les firmwares qui n'émettent pas vers le cloud ; nécessite HA sur le même réseau que le portier",
-        "local_sdk": "Local, port 8000 : LAN directe, se connecte avec le code de vérification. Fonctionne avec les comptes avec lesquels le portier est seulement partagé ; ajoute toujours une seconde caméra basse résolution",
+        "local": "Local, ports 9010/9020 de l'appareil : HA doit être sur le même LAN que le portier. Peut encore nécessiter un appel à l'API cloud pour obtenir la clé du flux. Corrige « pas de direct » sur les firmwares qui n'émettent pas vers le cloud",
+        "local_sdk": "Local, port 8000 de l'appareil. HA doit être sur le même LAN que le portier. Aucun besoin du cloud. Sur les portiers 4K, il peut fournir simultanément les flux haute et basse résolution. Fonctionne aussi avec les comptes avec lesquels le portier est seulement partagé.",
         "auto": "Auto : essaie local puis cloud"
       }
     },
@@ -357,8 +355,8 @@
       "options": {
         "auto": "Auto (par défaut) : détecte le codec",
         "h264": "H.264",
-        "hevc": "HEVC → H.264 : transcode le H.265 en H.264 pour WebRTC",
-        "hevc_copy": "HEVC tel quel : laisse passer le H.265 intact, pour hôtes peu puissants, Frigate ou Safari"
+        "hevc": "HEVC → H.264 : avec WebRTC, transcode le HEVC en H.264 (peut mal fonctionner sur les hôtes peu puissants). MJPEG décode directement le HEVC.",
+        "hevc_copy": "HEVC tel quel : laisse passer le H.265 intact, pour hôtes peu puissants, Frigate ou Safari. Avec WebRTC, le navigateur doit prendre en charge le HEVC ; MJPEG le décode sur l'hôte."
       }
     }
   }

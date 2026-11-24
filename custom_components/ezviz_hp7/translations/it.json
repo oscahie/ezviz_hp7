@@ -239,30 +239,28 @@
         "title": "Opzioni EZVIZ HP7 / CP7",
         "description": "Impostazioni di questo citofono. Ogni opzione è spiegata sotto di sé; la sezione avanzata di solito si può lasciare com'è.",
         "data": {
-          "monitor_serial": "Serial monitor interno"
+          "monitor_serial": "Numero di serie del monitor interno"
         },
         "data_description": {
-          "monitor_serial": "Solo per kit HP7 con monitor interno: il suo serial (o più serial separati da virgola, per l'HP7 bifamigliare) aggiunge uno switch per monitor. Altrimenti lascia vuoto."
+          "monitor_serial": "Inserisci il numero di serie del monitor interno (o più numeri separati da virgola per HP7 bifamigliare) per esporre uno switch dedicato per ogni monitor. Vuoto = nessun monitor."
         },
         "sections": {
           "video": {
             "name": "Video live",
-            "description": "Da dove arriva il live e come raggiunge il browser.",
             "data": {
               "stream_source": "Sorgente stream",
               "verification_code": "Codice di verifica",
               "encryption_key": "Password di crittografia video",
               "stream_quality": "Qualità stream LAN",
-              "stream_mode": "Modalità live",
+              "stream_mode": "Protocollo di riproduzione",
               "video_codec": "Codec video"
             },
             "data_description": {
               "stream_source": "Da dove Home Assistant prende il video live.",
-              "verification_code": "Le 6 lettere sull'etichetta del dispositivo. Serve per accedere con la sorgente 'Locale, porta 8000' e per decifrare il video finché la crittografia usa il codice dell'etichetta.",
+              "verification_code": "Le 6 lettere sull'etichetta del dispositivo. Può servire per l'accesso e/o per decifrare il video, a seconda della modalità.",
               "encryption_key": "Solo se hai cambiato la password di crittografia video nell'app EZVIZ. Altrimenti lascia vuoto.",
-              "stream_quality": "Usata solo dalla sorgente 'Locale, LAN'. 'Locale, porta 8000' crea sempre entrambe le telecamere e il cloud fornisce sempre la piena risoluzione.",
-              "stream_mode": "Come il video arriva al browser.",
-              "video_codec": "Cosa fa il relay con il video prima di passarlo."
+              "stream_quality": "Si applica solo alla riproduzione locale tramite le porte 9010/9020. Con la porta 8000, entrambe le qualità video saranno disponibili come entità video separate. Ignorata dalla sorgente Cloud.",
+              "stream_mode": "Come il video arriva al browser."
             }
           },
           "advanced": {
@@ -335,8 +333,8 @@
     "stream_source": {
       "options": {
         "cloud": "Cloud: relay VTM EZVIZ",
-        "local": "Locale, LAN: diretto, bypassa il cloud. Risolve 'live assente' sui firmware che non inviano al cloud; richiede HA sulla stessa rete del citofono",
-        "local_sdk": "Locale, porta 8000: LAN diretta, accede con il codice di verifica. Funziona con account con cui il citofono è solo condiviso; aggiunge sempre una seconda telecamera a bassa risoluzione",
+        "local": "Locale, porte 9010/9020 del dispositivo: HA deve essere sulla stessa LAN del citofono. Può comunque servire una chiamata all'API cloud per ottenere la chiave dello stream. Risolve 'live assente' sui firmware che non inviano al cloud",
+        "local_sdk": "Locale, porta 8000 del dispositivo. HA deve essere sulla stessa LAN del citofono. Non ha bisogno del cloud. Sui citofoni 4K può fornire contemporaneamente lo stream ad alta e a bassa risoluzione. Funziona anche con account con cui il citofono è solo condiviso.",
         "auto": "Auto: prova locale poi cloud"
       }
     },
@@ -357,8 +355,8 @@
       "options": {
         "auto": "Auto (default): rileva il codec",
         "h264": "H.264",
-        "hevc": "HEVC → H.264: transcodifica H.265 in H.264 per WebRTC",
-        "hevc_copy": "HEVC inalterato: passa l'H.265 così com'è, per host deboli, Frigate o Safari"
+        "hevc": "HEVC → H.264: con WebRTC, transcodifica HEVC in H.264 (potrebbe non funzionare bene su host poco potenti). MJPEG decodifica direttamente l'HEVC.",
+        "hevc_copy": "HEVC inalterato: passa l'H.265 così com'è, per host deboli, Frigate o Safari. Con WebRTC, il browser deve supportare HEVC; MJPEG lo decodifica sull'host."
       }
     }
   }
