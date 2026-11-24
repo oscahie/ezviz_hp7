@@ -351,7 +351,7 @@
       "options": {
         "auto": "Auto (domyślnie): wykrywa kodek",
         "h264": "H.264",
-        "hevc": "HEVC → H.264: transkoduje H.265 na H.264 dla WebRTC",
+        "hevc": "HEVC → H.264: przy WebRTC transkoduje HEVC na H.264 (może źle działać na słabych hostach). MJPEG dekoduje HEVC bezpośrednio.",
         "hevc_copy": "HEVC bez zmian: przekazuje H.265 nietknięty, dla słabych hostów, Frigate lub Safari"
       }
     }
