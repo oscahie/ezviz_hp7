@@ -502,6 +502,20 @@ def _has_keyframe(payload: bytes) -> bool:
     return any(m in payload for m in _KEYFRAME_MARKERS)
 
 
+def _from_keyframe(payload: bytes) -> bytes:
+    """Drop what precedes the first keyframe in ``payload``.
+
+    Cuts at the MPEG-PS pack header in front of it when there is one, so
+    a muxed chunk still starts on a pack.
+    """
+    hits = [i for i in (payload.find(m) for m in _KEYFRAME_MARKERS) if i >= 0]
+    if not hits:
+        return payload
+    first = min(hits)
+    pack = payload.rfind(b"\x00\x00\x01\xba", 0, first)
+    return payload[pack if pack >= 0 else first:]
+
+
 def _has_param_sets(payload: bytes) -> bool:
     return any(m in payload for m in _PARAM_SET_MARKERS)
 
@@ -933,6 +947,8 @@ class Hp7StreamRelay:
         self._active_lan: bool = False
         self._idle_handle: Optional[asyncio.TimerHandle] = None
         self._active_clients: int = 0
+        # Relay clients that are only one-shot snapshot grabs (not viewers).
+        self._snapshot_clients: int = 0
 
     @property
     def port(self) -> int:
@@ -1019,6 +1035,7 @@ class Hp7StreamRelay:
         kf = video and _has_keyframe(item)
         for q in list(qs):
             qid = id(q)
+            out = item
             if video and qid in self._q_resync:
                 # Saturated earlier: skip everything until a keyframe so the
                 # decoder resumes on a decodable boundary instead of being
@@ -1029,7 +1046,10 @@ class Hp7StreamRelay:
                     self._drops += 1
                     continue
                 self._q_resync.discard(qid)
-            if not self._put_latest(q, item) and video:
+                # Start the viewer on the keyframe itself, not on the
+                # undecodable frames that share its chunk.
+                out = _from_keyframe(item)
+            if not self._put_latest(q, out) and video:
                 if not self._warned_saturation:
                     self._warned_saturation = True
                     _LOGGER.warning(
@@ -1341,7 +1361,7 @@ class Hp7StreamRelay:
             )
             return
         self._decrypt_key = key
-        _LOGGER.warning(
+        _LOGGER.debug(
             "Hp7StreamRelay: stream is encrypted — decrypting it with the "
             "camera key (serial=%s)", self._serial,
         )
@@ -1424,17 +1444,23 @@ class Hp7StreamRelay:
         if self._warned_scrambled or parser.scrambled_packets < 8:
             return
         self._warned_scrambled = True
+        self._enable_decryption()
+        if self._decrypt_key is not None:
+            # Decrypting, so this is routine for every session on an
+            # encrypted device: no need to nag the user about it.
+            _LOGGER.debug(
+                "Hp7StreamRelay: stream is scrambled (PES_scrambling_control "
+                "on %d packets, serial=%s); decrypting it with the camera key",
+                parser.scrambled_packets, self._serial,
+            )
+            return
         _LOGGER.warning(
             "Hp7StreamRelay: the doorbell is SCRAMBLING the video "
             "(PES_scrambling_control set on %d packets, serial=%s). Image/"
-            "Video Encryption is enabled on the device; looking for the key "
-            "so the stream can be decrypted.",
+            "Video Encryption is enabled on the device and no key is "
+            "available to decrypt it.",
             parser.scrambled_packets, self._serial,
         )
-        self._enable_decryption()
-        if self._decrypt_key is not None:
-            # Decrypting, so no need to nag the user about the app setting.
-            return
         if self._hass is not None:
             try:
                 self._hass.loop.call_soon_threadsafe(self._raise_scrambled_repair)
@@ -2141,12 +2167,22 @@ class Hp7StreamRelay:
         # feed; a queue.Full mid-preload truncates the replay and the viewer
         # just falls back to waiting for the next keyframe.
         gop = self._gop_snapshot()
+        # A port-8000 client with no GOP to preload is held back until the
+        # next keyframe (see below), so its relay ffmpeg can stop probing
+        # early.
+        starts_on_keyframe = self._stream_source == "local_sdk" and not gop
         if lan:
             for chunk in gop:
                 try:
                     raw_q.put_nowait(chunk)
                 except queue.Full:
                     break
+            if not gop:
+                # Nothing to preload: hold the live feed back until the
+                # next keyframe. The sub stream joins mid-GOP and can't be
+                # forced to an IDR, and feeding ffmpeg P-frames first only
+                # delays its probe past the keyframe.
+                self._q_resync.add(id(raw_q))
             now0 = time.monotonic()
             self._q_last_drain[id(raw_q)] = now0
             self._q_last_drain[id(a_q)] = now0
@@ -2231,7 +2267,15 @@ class Hp7StreamRelay:
                     # #39 HPD7). A large analyzeduration/probesize is a ceiling,
                     # not a fixed wait — it starts as soon as params are known.
                     "-fflags", "+genpts", "-flags", "low_delay",
-                    "-analyzeduration", self._probe_duration_us, "-probesize", "10000000",
+                    # The PS also carries the AAC audio labelled as MP2, which
+                    # never yields codec parameters, so the probe always runs
+                    # to the full analyzeduration (~1 s of start-up delay per
+                    # cold start on an HP7 Pro). When the feed opens on a
+                    # keyframe the video parameters come first and 0.2 s is
+                    # plenty.
+                    "-analyzeduration",
+                    "200000" if starts_on_keyframe else self._probe_duration_us,
+                    "-probesize", "10000000",
                     # NO wall-clock re-timestamping on this input. It is a
                     # real MPEG-PS container that already carries correct
                     # timestamps; stamping by arrival instead collapses the
@@ -2606,6 +2650,15 @@ class Hp7LiveCamera(Camera):
         """
         if self._relay.port == 0:
             return None
+        # Counted so the coordinator doesn't treat a thumbnail grab as a
+        # viewer and slow its polling (and unlock detection) to 60 s.
+        self._relay._snapshot_clients += 1
+        try:
+            return await self._grab_snapshot()
+        finally:
+            self._relay._snapshot_clients -= 1
+
+    async def _grab_snapshot(self) -> bytes | None:
         url = self._relay.stream_url
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -2614,12 +2667,23 @@ class Hp7LiveCamera(Camera):
                 "-hide_banner",
                 "-loglevel",
                 "error",
+                # Same input options as the MJPEG path: +nobuffer forces
+                # analyzeduration to 0, so ffmpeg gave up on HEVC before the
+                # parameter sets ("unspecified size") and every snapshot
+                # failed after the 10 s timeout, holding a 4K session open.
+                # 2 s is enough once the relay has replayed its cached GOP
+                # (the usual case); HA aborts camera images after 10 s.
+                "-analyzeduration",
+                "2000000",
+                "-probesize",
+                "10000000",
+                "-f",
+                "mpegts",
                 "-fflags",
-                "+nobuffer",
-                "-flags",
-                "low_delay",
+                "+discardcorrupt",
                 "-i",
                 url,
+                "-an",
                 "-frames:v",
                 "1",
                 "-q:v",
@@ -2636,12 +2700,17 @@ class Hp7LiveCamera(Camera):
         try:
             data, _ = await asyncio.wait_for(proc.communicate(), timeout=10.0)
         except asyncio.TimeoutError:
-            try:
-                proc.kill()
-            except ProcessLookupError:
-                pass
             _LOGGER.debug("Hp7LiveCamera: snapshot ffmpeg timed out")
             return None
+        finally:
+            # Also on cancellation (HA gives up on the image after 10 s):
+            # an orphaned ffmpeg stops reading but keeps its relay client,
+            # which then counts as a viewer until the relay drops it.
+            if proc.returncode is None:
+                try:
+                    proc.kill()
+                except ProcessLookupError:
+                    pass
         return data or None
 
 

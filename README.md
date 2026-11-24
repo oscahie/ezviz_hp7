@@ -22,6 +22,26 @@
 
 ---
 
+## 🍴 About this fork
+
+This is a personal fork of [Bobsilvio/ezviz_hp7](https://github.com/Bobsilvio/ezviz_hp7), focused on **better support for the EZVIZ HP7 Pro 4K** (indoor monitor CS-HP7-R400-1W2TFD + door station CS-HPD7-R400-8G8). The upstream project has been quiet for a while, so the changes below live here instead of waiting on upstream review. The intention is to keep it up to date, and to pull in upstream fixes if development there resumes, but it is maintained on a best-effort basis with no guarantees. Where possible, I'll also send these improvements upstream as pull requests whenever there is a chance of them being merged. Everything that works on the original HP7 should keep working.
+
+What this fork adds on top of upstream:
+
+- **Encrypted HP7 Pro video that plays.** On the 4K HEVC main stream the Pro encrypts only keyframes and parameter sets (plus the AAC audio), so decrypting every frame broke the picture; it now decodes, with audio. The 720p H.264 sub-stream, which is fully encrypted, also decodes now.
+- **Local live view over port 8000** (`local_sdk` stream source). It logs in to the indoor monitor with the device verification code and streams the 4K HEVC feed over the LAN, with no cloud key needed, so it also works on accounts the device is only *shared* with. `auto` now tries CPD7 → port 8000 → cloud.
+- **Faster start of encrypted local streams** (`local` and `local_sdk`). The first keyframe is decrypted instead of waiting for the next one, and decryption uses about 9× less CPU. On the HP7 Pro over port 8000 the relay now has the first frame ready in about 2.5 s instead of about 6 s, whatever the stream mode (WebRTC, HLS or MJPEG); the player adds its own delay on top.
+- **Who opened the door.** Face and palm unlocks are recognised from the Pro's enrolment names, and a new `event.<device>_unlock` entity records every unlock with its method and user (e.g. `Palm - Oscar`).
+- **Near-instant events through EZVIZ cloud push.** The integration listens on the same channel-99 push link the mobile app uses, so doorbell calls, unlocks and detections reach Home Assistant almost instantly (about a second) instead of on the next poll. If channel 99 can't start, it falls back to the legacy EZVIZ push (unlocks and detections only) and raises a Repairs issue. Each account uses its own push client, and polling remains as the last fallback.
+- **Hang up a ringing call from Home Assistant.** A new *Hang Up Call* button stops the indoor monitor and the phones ringing, as answering in the app does, so an automation can, for example, unlock the door and silence the call in one go. Failures are logged with the reason.
+- **Lower idle CPU.** A viewer that stops reading no longer keeps the LAN stream running in the background.
+- **Smoother LAN audio and video in WebRTC/HLS**: no more dropped frames every few seconds or backwards audio timestamps.
+- **Community fixes from upstream.** This fork may also include pull requests that are still open, or were never merged, in the upstream repository.
+
+Tested on a real HP7 Pro 4K (door station fw V5.4.0) and an original HP7 / HPD7.
+
+---
+
 Custom Home Assistant integration for the **EZVIZ HP7 and CP7 video intercoms** (and their close siblings — HP5, CP5, DP1, DP2). HP7 is the original target; CP7 shares the same cloud APIs and live-stream protocol, so it works through the same code path. The device model is auto-detected from the cloud (`deviceSubCategory` / `deviceType`) and shown in the Home Assistant device card.
 
 Unlock door / gate remotely, watch the live stream, hear the visitor on the intercom audio, manage the chime sound and volume on both the doorbell and every indoor monitor, react to RFID / face / palm / code / app unlocks in automations.
@@ -101,14 +121,14 @@ Remove unused devices to free at least one slot.
 
 1. Open Home Assistant
 2. Go to **HACS → Integrations → Custom repositories**
-3. Add `https://github.com/Bobsilvio/ezviz_hp7` with type `Integration`
+3. Add `https://github.com/oscahie/ezviz_hp7` with type `Integration`
 4. Search for `Ezviz Hp7` and install
 5. Restart Home Assistant
 6. Go to **Settings → Devices & Services** and add the integration
 
 ## 📦 One-click install
 
-[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=bobsilvio&repository=ezviz_hp7&category=integration)
+[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=oscahie&repository=ezviz_hp7&category=integration)
 
 ---
 
