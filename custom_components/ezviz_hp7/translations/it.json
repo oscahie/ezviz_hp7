@@ -252,7 +252,7 @@
               "verification_code": "Codice di verifica",
               "encryption_key": "Password di crittografia video",
               "stream_quality": "Qualità stream LAN",
-              "stream_mode": "Modalità live",
+              "stream_mode": "Protocollo di riproduzione",
               "video_codec": "Codec video"
             },
             "data_description": {

@@ -292,7 +292,7 @@
               "verification_code": "Verification code",
               "encryption_key": "Video encryption password",
               "stream_quality": "LAN stream quality",
-              "stream_mode": "Live view delivery",
+              "stream_mode": "Playback protocol",
               "video_codec": "Video codec"
             },
             "data_description": {

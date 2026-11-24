@@ -252,7 +252,7 @@
               "verification_code": "Code de vérification",
               "encryption_key": "Mot de passe de chiffrement vidéo",
               "stream_quality": "Qualité du flux LAN",
-              "stream_mode": "Mode de diffusion",
+              "stream_mode": "Protocole de lecture",
               "video_codec": "Codec vidéo"
             },
             "data_description": {
