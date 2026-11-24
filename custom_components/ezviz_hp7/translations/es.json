@@ -299,7 +299,7 @@
               "stream_source": "De dónde saca Home Assistant el vídeo en directo.",
               "verification_code": "Las 6 letras de la etiqueta del dispositivo. Puede ser necesario para iniciar sesión y/o para descifrar el vídeo, según el modo.",
               "encryption_key": "Solo si cambiaste la contraseña de cifrado de vídeo en la app EZVIZ. Si no, déjalo vacío.",
-              "stream_quality": "Solo aplica a la reproducción local por los puertos 9010/9020. La fuente Nube lo ignora. Los dispositivos con stream 4K y la fuente en Local por el puerto 8000 deberían tener siempre las dos calidades de vídeo disponibles como entidades de vídeo separadas.",
+              "stream_quality": "Solo aplica a la reproducción local por los puertos 9010/9020. Con el puerto 8000, las dos calidades de vídeo estarán disponibles como entidades de vídeo separadas. La fuente Nube lo ignora.",
               "stream_mode": "Cómo llega el vídeo al navegador.",
               "video_codec": "Qué hace el relay con el vídeo antes de entregarlo."
             }
