@@ -67,8 +67,8 @@ Remove unused devices to free at least one slot.
   - 🛡️ `defence` — *(beta)* armed / disarmed (`STATUS.globalStatus`, written with `changeDefenceStatusReq`, as the app does)
 - **Number sliders**
   - 🔊 `chime_volume` / `chime_volume_monitor` — chime volume. Door station 0–100, same scale as the EZVIZ app (on the HP7 Pro door station this is also the voice / unlock-beep volume); indoor monitor 0–7
-  - 🎵 `chime_ringtone` / `chime_ringtone_monitor` — *(beta)* ringtone selector 0–15 for the doorbell press
-  - 🎵 `chime_pir_ringtone` / `chime_pir_ringtone_monitor` — *(beta)* ringtone selector 0–15 for motion events
+  - 🎵 `chime_ringtone` / `chime_ringtone_monitor` — *(beta)* ringtone selector 0–19 for the doorbell press
+  - 🎵 `chime_pir_ringtone` / `chime_pir_ringtone_monitor` — *(beta)* ringtone selector 0–19 for motion events
 - **Sensors**
   - Device name, firmware version, online/offline status
   - Wi-Fi signal (%), SSID, local IP, WAN IP
