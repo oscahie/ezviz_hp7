@@ -310,6 +310,27 @@
           "no_device": "Ce portier n'est plus configuré dans Home Assistant."
         }
       }
+    },
+    "verification_code_missing": {
+      "title": "Code de vérification manquant pour {serial}",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Code de vérification requis pour {serial}",
+            "description": "La source du flux est « Local, port 8000 de l'appareil », qui se connecte à l'appareil avec le code de vérification : les 6 lettres de l'étiquette de l'appareil. Aucun code n'est configuré, donc le direct ne peut pas démarrer.\n\nSaisissez le code ci-dessous. Home Assistant le vérifie en se connectant à l'appareil sur le port 8000 avant de l'enregistrer. Vous pouvez aussi le saisir plus tard dans Configurer → Vidéo en direct → Code de vérification.",
+            "data": {
+              "code": "Code de vérification"
+            }
+          }
+        },
+        "error": {
+          "empty_code": "Saisissez le code.",
+          "cannot_login": "Home Assistant n'a pas pu se connecter à l'appareil sur le port 8000 avec ce code. Vérifiez les 6 lettres de l'étiquette de l'appareil et que Home Assistant est sur le même réseau local que le portier."
+        },
+        "abort": {
+          "no_device": "Ce portier n'est plus configuré dans Home Assistant."
+        }
+      }
     }
   },
   "exceptions": {

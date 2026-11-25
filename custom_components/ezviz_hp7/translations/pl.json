@@ -310,6 +310,27 @@
           "no_device": "Ten wideodomofon nie jest już skonfigurowany w Home Assistant."
         }
       }
+    },
+    "verification_code_missing": {
+      "title": "Brak kodu weryfikacyjnego dla {serial}",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Potrzebny kod weryfikacyjny dla {serial}",
+            "description": "Źródło strumienia to \"Lokalnie, port 8000 urządzenia\", które loguje się do urządzenia kodem weryfikacyjnym: 6 liter z etykiety urządzenia. Nie skonfigurowano żadnego kodu, więc podgląd na żywo nie może się uruchomić.\n\nWpisz kod poniżej. Home Assistant sprawdza go, logując się do urządzenia na porcie 8000, zanim go zapisze. Możesz też wpisać go później w Konfiguruj → Obraz na żywo → Kod weryfikacyjny.",
+            "data": {
+              "code": "Kod weryfikacyjny"
+            }
+          }
+        },
+        "error": {
+          "empty_code": "Wpisz kod.",
+          "cannot_login": "Home Assistant nie mógł zalogować się do urządzenia na porcie 8000 tym kodem. Sprawdź 6 liter z etykiety urządzenia i czy Home Assistant jest w tej samej sieci LAN co wideodomofon."
+        },
+        "abort": {
+          "no_device": "Ten wideodomofon nie jest już skonfigurowany w Home Assistant."
+        }
+      }
     }
   },
   "exceptions": {
