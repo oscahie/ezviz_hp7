@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 import hashlib
 import ipaddress
 from itertools import chain
+import logging
 import subprocess
 from threading import Event, Thread
 import time
@@ -35,6 +36,7 @@ from .hcnetsdk import (
     HcNetSdkCommandPortStreamBootstrap,
     HcNetSdkLanEndpoint,
     HcNetSdkRealDataPacket,
+    HcNetSdkTcpFrame,
     SocketFactory,
     hcnetsdk_command_port_control_template_from_frame,
     iter_hcnetsdk_real_data_mpegps,
@@ -48,6 +50,8 @@ from .stream import (
     decrypt_hikvision_ps_video,
     rtp_payload,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 HCNETSDK_COMMAND_PORT_NATIVE_PLAN_APP_LAN_LIVE_VIEW = "app-lan-live-view"
 
@@ -296,6 +300,12 @@ class HcNetSdkCommandPortGeneratedMultiSocketPlan:
                 for step in self.steps
             )
         )
+
+
+# NET_DVR_Logout_V30 -> PRO_LogoutPrivateDevice sends command 0x10100
+# (0x10200 is the user heartbeat), libHCCore.so of the EZVIZ app 7.6.1.
+HCNETSDK_COMMAND_PORT_LOGOUT_COMMAND = 0x10100
+HCNETSDK_COMMAND_PORT_LOGOUT_ADDEND_DELTA = 6
 
 
 def hcnetsdk_command_port_native_lan_live_view_plan(
@@ -1065,7 +1075,9 @@ class HcNetSdkCommandPortGeneratedMultiSocketMediaStream:
         self.rsa_key = rsa_key
         self.login_session: HcNetSdkCommandPortLoginSession | None = None
         self.bootstrap: HcNetSdkCommandPortStreamBootstrap | None = None
+        self.logout_response: HcNetSdkTcpFrame | None = None
         self._stream: HcNetSdkCommandPortMultiSocketMediaStream | None = None
+        self._session_local_ip: str | None = None
 
     def __enter__(self) -> HcNetSdkCommandPortGeneratedMultiSocketMediaStream:
         return self
@@ -1074,10 +1086,42 @@ class HcNetSdkCommandPortGeneratedMultiSocketMediaStream:
         self.close()
 
     def close(self) -> None:
-        """Close the rendered multi-socket media stream."""
+        """Close the media sockets, then log the session out."""
         if self._stream is not None:
             self._stream.close()
             self._stream = None
+        session, self.login_session = self.login_session, None
+        if session is not None:
+            self._logout(session)
+
+    def _logout(self, session: HcNetSdkCommandPortLoginSession) -> None:
+        """Send the SDK's logout (0x10100) for ``session``, best effort.
+
+        Closing the sockets alone leaves the login alive on the device until
+        it expires. The old HP7 stops answering new previews after a few
+        such leftover sessions, so release each one explicitly, the way
+        NET_DVR_Logout_V30 does (PRO_LogoutPrivateDevice, command 0x10100).
+        """
+        if self._session_local_ip is None:
+            return
+        kwargs: dict[str, Any] = {"timeout": min(self.timeout or 3.0, 3.0)}
+        if self.socket_factory is not None:
+            kwargs["socket_factory"] = self.socket_factory
+        try:
+            frame = HcNetSdkCommandPortControlTemplate(
+                command_id=HCNETSDK_COMMAND_PORT_LOGOUT_COMMAND,
+                addend_delta=HCNETSDK_COMMAND_PORT_LOGOUT_ADDEND_DELTA,
+            ).to_frame(
+                session_id=session.session_id,
+                auth_seed=session.auth_seed,
+                key=session.challenge,
+                local_ip=self._session_local_ip,
+            )
+            with HcNetSdkCommandPortClient(self.endpoint, **kwargs) as client:
+                client.send_command_frame(frame)
+                self.logout_response = client.read_tcp_frame()
+        except (OSError, PyEzvizError) as err:
+            _LOGGER.debug("HCNetSDK command-port logout failed: %s", err)
 
     @property
     def media_socket(self) -> Any:
@@ -1109,6 +1153,7 @@ class HcNetSdkCommandPortGeneratedMultiSocketMediaStream:
 
         with self._login_client() as login_client:
             local_ip = self.local_ip or self._client_local_ip(login_client)
+            self._session_local_ip = local_ip
             self.login_session = login_client.login(
                 password=self.password,
                 username=self.username,
