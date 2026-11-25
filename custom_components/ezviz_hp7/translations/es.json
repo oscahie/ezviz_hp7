@@ -354,6 +354,27 @@
     "channel99_unavailable": {
       "title": "Llamadas del timbre solo por sondeo ({serial})",
       "description": "Home Assistant no ha podido usar el push \"canal 99\" de EZVIZ para {serial} ({reason}). El canal 99 es por donde la app recibe las llamadas del timbre; sin él, las aperturas siguen llegando por el push normal, pero los timbrazos solo se ven al sondear, con hasta 15 s de retraso.\n\nCausas habituales: la cuenta pide un código de verificación al iniciar sesión desde un móvil nuevo, o la contraseña ha cambiado. Inicia sesión una vez en la app EZVIZ con esta cuenta y recarga la integración. Se reintenta solo cada pocas horas."
+    },
+    "verification_code_missing": {
+      "title": "Falta el código de verificación de {serial}",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Hace falta el código de verificación de {serial}",
+            "description": "La fuente del stream es \"Local, puerto 8000 del dispositivo\", que inicia sesión en el dispositivo con el código de verificación: las 6 letras de la etiqueta del dispositivo. No hay ningún código configurado, así que el vídeo en directo no puede arrancar.\n\nIntroduce el código abajo. Home Assistant lo comprueba iniciando sesión en el dispositivo por el puerto 8000 antes de guardarlo. También puedes ponerlo más tarde en Configurar → Vídeo en directo → Código de verificación.",
+            "data": {
+              "code": "Código de verificación"
+            }
+          }
+        },
+        "error": {
+          "empty_code": "Introduce el código.",
+          "cannot_login": "Home Assistant no ha podido iniciar sesión en el dispositivo por el puerto 8000 con este código. Revisa las 6 letras de la etiqueta del dispositivo y que Home Assistant esté en la misma LAN que el videoportero."
+        },
+        "abort": {
+          "no_device": "Ese videoportero ya no está configurado en Home Assistant."
+        }
+      }
     }
   },
   "exceptions": {

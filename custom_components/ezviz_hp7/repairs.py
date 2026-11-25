@@ -1,6 +1,7 @@
 """Repair flows for the EZVIZ HP7 integration.
 
-The only fixable issue so far is the encrypted-stream one (#47). On firmware
+Two fixable issues: the label's verification code missing while the stream
+source is local_sdk (port 8000), and the encrypted-stream one (#47). On firmware
 that keeps Image/Video Encryption on with no toggle in the app, the cloud
 refuses to hand the decryption key to an un-elevated session and answers
 20002 — and that refusal is itself what makes EZVIZ e-mail a 4-digit code
@@ -19,7 +20,7 @@ from homeassistant import data_entry_flow
 from homeassistant.components.repairs import RepairsFlow
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_ENCRYPTION_KEY, DOMAIN
+from .const import CONF_ENCRYPTION_KEY, CONF_VERIFICATION_CODE, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -91,6 +92,70 @@ class EncryptionOtpRepairFlow(RepairsFlow):
         )
 
 
+class VerificationCodeRepairFlow(RepairsFlow):
+    """Ask for the label's code when local_sdk has none, check it, store it."""
+
+    def __init__(self, serial: str) -> None:
+        """Remember which doorbell this flow is fixing."""
+        self._serial = serial
+
+    async def async_step_init(
+        self, user_input: dict[str, str] | None = None
+    ) -> data_entry_flow.FlowResult:
+        """Entry point — go straight to the code form."""
+        return await self.async_step_confirm()
+
+    async def async_step_confirm(
+        self, user_input: dict[str, str] | None = None
+    ) -> data_entry_flow.FlowResult:
+        """Log in on port 8000 with the code; store it only if that works."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            code = str(user_input.get("code", "")).strip()
+            entry, api = _resolve_entry(self.hass, self._serial)
+            if api is None or entry is None:
+                return self.async_abort(reason="no_device")
+            if not code:
+                errors["code"] = "empty_code"
+            elif await self.hass.async_add_executor_job(
+                _port_8000_login_works, api, self._serial, code
+            ):
+                # Saving the options reloads the entry, whose setup clears
+                # the issue now that a code is configured.
+                self.hass.config_entries.async_update_entry(
+                    entry,
+                    options={**entry.options, CONF_VERIFICATION_CODE: code},
+                )
+                return self.async_create_entry(title="", data={})
+            else:
+                errors["code"] = "cannot_login"
+
+        return self.async_show_form(
+            step_id="confirm",
+            data_schema=vol.Schema({vol.Required("code", default=""): str}),
+            errors=errors,
+            description_placeholders={"serial": self._serial},
+        )
+
+
+def _port_8000_login_works(api: Any, serial: str, code: str) -> bool:
+    """Open and close a port-8000 session with this code (blocking)."""
+    from .live_camera import NetSdkLanSource
+
+    source = NetSdkLanSource(api, serial, code)
+    try:
+        source.start()
+    except Exception as exc:  # noqa: BLE001
+        _LOGGER.warning(
+            "EZVIZ HP7: port-8000 log-in with the entered code failed for %s: %s",
+            serial, exc,
+        )
+        return False
+    finally:
+        source.close()
+    return True
+
+
 def _resolve_entry(hass: HomeAssistant, serial: str) -> tuple[Any, Any]:
     """Find the config entry and API client that own this serial."""
     for entry_id, data in hass.data.get(DOMAIN, {}).items():
@@ -107,6 +172,10 @@ async def async_create_fix_flow(
 ) -> RepairsFlow:
     """Build the flow for a fixable issue."""
     serial = str((data or {}).get("serial") or "")
+    if issue_id.startswith("verification_code_missing_"):
+        return VerificationCodeRepairFlow(
+            serial or issue_id[len("verification_code_missing_"):]
+        )
     if not serial and issue_id.startswith("encryption_otp_"):
         serial = issue_id[len("encryption_otp_"):]
     return EncryptionOtpRepairFlow(serial)

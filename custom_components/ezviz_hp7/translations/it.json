@@ -314,6 +314,27 @@
     "channel99_unavailable": {
       "title": "Doorbell calls via polling only ({serial})",
       "description": "Home Assistant could not use EZVIZ's \"channel 99\" push for {serial} ({reason}). Channel 99 is the link the mobile app gets doorbell calls on; without it, unlocks still arrive by the regular push but rings are only seen by polling, up to 15 s late.\n\nCommon causes: the account asks for a verification code when logging in from a new phone, or the password changed. Log in to the EZVIZ app with this account once, then reload the integration. It is retried automatically every few hours."
+    },
+    "verification_code_missing": {
+      "title": "Codice di verifica mancante per {serial}",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Serve il codice di verifica per {serial}",
+            "description": "La sorgente stream è \"Locale, porta 8000 del dispositivo\", che accede al dispositivo con il codice di verifica: le 6 lettere sull'etichetta del dispositivo. Nessun codice è configurato, quindi la diretta non può partire.\n\nInserisci il codice qui sotto. Home Assistant lo verifica accedendo al dispositivo sulla porta 8000 prima di salvarlo. Puoi anche inserirlo più tardi in Configura → Video live → Codice di verifica.",
+            "data": {
+              "code": "Codice di verifica"
+            }
+          }
+        },
+        "error": {
+          "empty_code": "Inserisci il codice.",
+          "cannot_login": "Home Assistant non è riuscito ad accedere al dispositivo sulla porta 8000 con questo codice. Controlla le 6 lettere sull'etichetta del dispositivo e che Home Assistant sia sulla stessa LAN del videocitofono."
+        },
+        "abort": {
+          "no_device": "Quel videocitofono non è più configurato in Home Assistant."
+        }
+      }
     }
   },
   "exceptions": {

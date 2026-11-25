@@ -2774,6 +2774,9 @@ async def async_setup_live_entities(
         verification_code=str(data.get("verification_code") or ""),
         hass=hass,
     )
+    _sync_missing_code_issue(
+        hass, serial, stream_source, needs_code=not relay._login_code
+    )
     await relay.start()
     data["live_relay"] = relay
     # Let the coordinator see the relay so it can back polling off while
@@ -2843,6 +2846,47 @@ async def async_setup_live_entities(
         )
 
     async_add_entities(entities)
+
+
+MISSING_CODE_ISSUE = "verification_code_missing_"
+
+
+def _sync_missing_code_issue(
+    hass: HomeAssistant, serial: str, stream_source: str, *, needs_code: bool
+) -> None:
+    """Raise or clear the Repairs issue for local_sdk without a code.
+
+    The port-8000 source logs in with the label's verification code (or the
+    video encryption password, which is the same until changed). With neither
+    set, NetSdkLanSource.start() refuses before touching the network, so the
+    live view can never start. That is known from the configuration alone,
+    so it is checked on every setup and cleared as soon as it no longer holds.
+    """
+    from homeassistant.helpers import issue_registry as ir
+
+    issue_id = f"{MISSING_CODE_ISSUE}{serial}"
+    try:
+        if stream_source == "local_sdk" and needs_code:
+            _LOGGER.warning(
+                "Hp7StreamRelay: stream source is local_sdk (port 8000) but no "
+                "verification code is configured (serial=%s); the live view "
+                "cannot start until it is entered in Configure.",
+                serial,
+            )
+            ir.async_create_issue(
+                hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=True,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key="verification_code_missing",
+                translation_placeholders={"serial": serial},
+                data={"serial": serial},
+            )
+        else:
+            ir.async_delete_issue(hass, DOMAIN, issue_id)
+    except Exception as exc:  # noqa: BLE001
+        _LOGGER.debug("Hp7StreamRelay: could not update the code issue: %s", exc)
 
 
 async def _resolve_auto_stream_mode(relay: "Hp7StreamRelay") -> str:
