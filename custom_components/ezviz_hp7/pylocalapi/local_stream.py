@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 import hashlib
 import ipaddress
 from itertools import chain
+import logging
 import subprocess
 from threading import Event, Thread
 import time
@@ -35,6 +36,7 @@ from .hcnetsdk import (
     HcNetSdkCommandPortStreamBootstrap,
     HcNetSdkLanEndpoint,
     HcNetSdkRealDataPacket,
+    HcNetSdkTcpFrame,
     SocketFactory,
     hcnetsdk_command_port_control_template_from_frame,
     iter_hcnetsdk_real_data_mpegps,
@@ -48,6 +50,8 @@ from .stream import (
     decrypt_hikvision_ps_video,
     rtp_payload,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 HCNETSDK_COMMAND_PORT_NATIVE_PLAN_APP_LAN_LIVE_VIEW = "app-lan-live-view"
 
@@ -151,6 +155,9 @@ class HcNetSdkCommandPortSocketStep:
     keepalive_frames: tuple[bytes, ...] = ()
     keepalive_interval_seconds: float = 5.0
     keepalive_initial_delay_seconds: float | None = None
+    # Keep resending the last keepalive frame after the list runs out, for
+    # as long as the stream is open (the SDK's 0x30006 heartbeat never stops).
+    keepalive_repeat_last: bool = False
     name: str | None = None
 
 
@@ -168,6 +175,9 @@ class HcNetSdkCommandPortGeneratedSocketStep:
     keepalive_templates: tuple[HcNetSdkCommandPortControlTemplate, ...] = ()
     keepalive_interval_seconds: float = 5.0
     keepalive_initial_delay_seconds: float | None = None
+    # Keep resending the last keepalive frame after the list runs out, for
+    # as long as the stream is open (the SDK's 0x30006 heartbeat never stops).
+    keepalive_repeat_last: bool = False
     name: str | None = None
 
     def to_socket_step(
@@ -208,6 +218,7 @@ class HcNetSdkCommandPortGeneratedSocketStep:
             ),
             keepalive_interval_seconds=self.keepalive_interval_seconds,
             keepalive_initial_delay_seconds=self.keepalive_initial_delay_seconds,
+            keepalive_repeat_last=self.keepalive_repeat_last,
             name=self.name,
         )
 
@@ -296,6 +307,12 @@ class HcNetSdkCommandPortGeneratedMultiSocketPlan:
                 for step in self.steps
             )
         )
+
+
+# NET_DVR_Logout_V30 -> PRO_LogoutPrivateDevice sends command 0x10100
+# (0x10200 is the user heartbeat), libHCCore.so of the EZVIZ app 7.6.1.
+HCNETSDK_COMMAND_PORT_LOGOUT_COMMAND = 0x10100
+HCNETSDK_COMMAND_PORT_LOGOUT_ADDEND_DELTA = 6
 
 
 def hcnetsdk_command_port_native_lan_live_view_plan(
@@ -402,6 +419,9 @@ def hcnetsdk_command_port_native_lan_live_view_plan(
                     for delta in (10, 16, 22, 28, 34, 40)
                 ),
                 keepalive_interval_seconds=5.0,
+                # libHCPreview sends 0x30006 on the stream socket every 5 s
+                # for the whole preview (CGetStreamBase::DoExchange).
+                keepalive_repeat_last=True,
                 name="media",
             ),
             _hcnetsdk_generated_step(
@@ -854,7 +874,13 @@ class HcNetSdkCommandPortMultiSocketMediaStream:
             )
             if initial_delay > 0 and self._keepalive_stop.wait(initial_delay):
                 return
-            for index, frame in enumerate(step.keepalive_frames):
+            frames: Iterable[bytes] = step.keepalive_frames
+            if step.keepalive_repeat_last:
+                last = step.keepalive_frames[-1]
+                frames = chain(
+                    step.keepalive_frames, iter(lambda: last, None)
+                )
+            for index, frame in enumerate(frames):
                 if self._keepalive_stop.is_set():
                     return
                 command_id = (
@@ -886,7 +912,12 @@ class HcNetSdkCommandPortMultiSocketMediaStream:
                             sent=True,
                         )
                     )
-                if index == len(step.keepalive_frames) - 1:
+                # Bounded history: the heartbeat can run for hours.
+                del self.keepalive_events[:-64]
+                if (
+                    not step.keepalive_repeat_last
+                    and index == len(step.keepalive_frames) - 1
+                ):
                     return
                 if (
                     step.keepalive_interval_seconds > 0
@@ -1065,7 +1096,9 @@ class HcNetSdkCommandPortGeneratedMultiSocketMediaStream:
         self.rsa_key = rsa_key
         self.login_session: HcNetSdkCommandPortLoginSession | None = None
         self.bootstrap: HcNetSdkCommandPortStreamBootstrap | None = None
+        self.logout_response: HcNetSdkTcpFrame | None = None
         self._stream: HcNetSdkCommandPortMultiSocketMediaStream | None = None
+        self._session_local_ip: str | None = None
 
     def __enter__(self) -> HcNetSdkCommandPortGeneratedMultiSocketMediaStream:
         return self
@@ -1074,10 +1107,42 @@ class HcNetSdkCommandPortGeneratedMultiSocketMediaStream:
         self.close()
 
     def close(self) -> None:
-        """Close the rendered multi-socket media stream."""
+        """Close the media sockets, then log the session out."""
         if self._stream is not None:
             self._stream.close()
             self._stream = None
+        session, self.login_session = self.login_session, None
+        if session is not None:
+            self._logout(session)
+
+    def _logout(self, session: HcNetSdkCommandPortLoginSession) -> None:
+        """Send the SDK's logout (0x10100) for ``session``, best effort.
+
+        Closing the sockets alone leaves the login alive on the device until
+        it expires. The old HP7 stops answering new previews after a few
+        such leftover sessions, so release each one explicitly, the way
+        NET_DVR_Logout_V30 does (PRO_LogoutPrivateDevice, command 0x10100).
+        """
+        if self._session_local_ip is None:
+            return
+        kwargs: dict[str, Any] = {"timeout": min(self.timeout or 3.0, 3.0)}
+        if self.socket_factory is not None:
+            kwargs["socket_factory"] = self.socket_factory
+        try:
+            frame = HcNetSdkCommandPortControlTemplate(
+                command_id=HCNETSDK_COMMAND_PORT_LOGOUT_COMMAND,
+                addend_delta=HCNETSDK_COMMAND_PORT_LOGOUT_ADDEND_DELTA,
+            ).to_frame(
+                session_id=session.session_id,
+                auth_seed=session.auth_seed,
+                key=session.challenge,
+                local_ip=self._session_local_ip,
+            )
+            with HcNetSdkCommandPortClient(self.endpoint, **kwargs) as client:
+                client.send_command_frame(frame)
+                self.logout_response = client.read_tcp_frame()
+        except (OSError, PyEzvizError) as err:
+            _LOGGER.debug("HCNetSDK command-port logout failed: %s", err)
 
     @property
     def media_socket(self) -> Any:
@@ -1109,6 +1174,7 @@ class HcNetSdkCommandPortGeneratedMultiSocketMediaStream:
 
         with self._login_client() as login_client:
             local_ip = self.local_ip or self._client_local_ip(login_client)
+            self._session_local_ip = local_ip
             self.login_session = login_client.login(
                 password=self.password,
                 username=self.username,
