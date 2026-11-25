@@ -329,7 +329,30 @@
         },
         "error": {
           "empty_code": "Saisissez le code.",
-          "cannot_login": "Home Assistant n'a pas pu se connecter à l'appareil sur le port 8000 avec ce code. Vérifiez les 6 lettres de l'étiquette de l'appareil et que Home Assistant est sur le même réseau local que le portier."
+          "cannot_login": "Home Assistant n'a pas pu se connecter à l'appareil sur le port 8000 avec ce code. Vérifiez les 6 lettres de l'étiquette de l'appareil et que Home Assistant est sur le même réseau local que le portier.",
+          "invalid_code": "L'appareil a refusé ce code. Vérifiez les 6 lettres de l'étiquette de l'appareil."
+        },
+        "abort": {
+          "no_device": "Ce portier n'est plus configuré dans Home Assistant."
+        }
+      }
+    },
+    "verification_code_rejected": {
+      "title": "Code de vérification refusé par {serial}",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Code de vérification refusé par {serial}",
+            "description": "L'appareil a refusé la connexion sur le port 8000 avec le code de vérification configuré, donc le direct ne peut pas démarrer. Pour ne pas bloquer l'appareil, Home Assistant ne réessaie pas ce code tant qu'il n'est pas modifié.\n\nSaisissez le code ci-dessous : les 6 lettres de l'étiquette de l'appareil. Home Assistant le vérifie en se connectant à l'appareil sur le port 8000 avant de l'enregistrer. Vous pouvez aussi le modifier dans Configurer → Vidéo en direct → Code de vérification.",
+            "data": {
+              "code": "Code de vérification"
+            }
+          }
+        },
+        "error": {
+          "empty_code": "Saisissez le code.",
+          "cannot_login": "Home Assistant n'a pas pu se connecter à l'appareil sur le port 8000 avec ce code. Vérifiez les 6 lettres de l'étiquette de l'appareil et que Home Assistant est sur le même réseau local que le portier.",
+          "invalid_code": "L'appareil a refusé ce code. Vérifiez les 6 lettres de l'étiquette de l'appareil."
         },
         "abort": {
           "no_device": "Ce portier n'est plus configuré dans Home Assistant."

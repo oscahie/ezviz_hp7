@@ -329,7 +329,30 @@
         },
         "error": {
           "empty_code": "Wpisz kod.",
-          "cannot_login": "Home Assistant nie mógł zalogować się do urządzenia na porcie 8000 tym kodem. Sprawdź 6 liter z etykiety urządzenia i czy Home Assistant jest w tej samej sieci LAN co wideodomofon."
+          "cannot_login": "Home Assistant nie mógł zalogować się do urządzenia na porcie 8000 tym kodem. Sprawdź 6 liter z etykiety urządzenia i czy Home Assistant jest w tej samej sieci LAN co wideodomofon.",
+          "invalid_code": "Urządzenie odrzuciło ten kod. Sprawdź 6 liter z etykiety urządzenia."
+        },
+        "abort": {
+          "no_device": "Ten wideodomofon nie jest już skonfigurowany w Home Assistant."
+        }
+      }
+    },
+    "verification_code_rejected": {
+      "title": "{serial} odrzucił kod weryfikacyjny",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "{serial} odrzucił kod weryfikacyjny",
+            "description": "Urządzenie odrzuciło logowanie na porcie 8000 skonfigurowanym kodem weryfikacyjnym, więc podgląd na żywo nie może się uruchomić. Aby nie zablokować urządzenia, Home Assistant nie próbuje ponownie tego kodu, dopóki nie zostanie zmieniony.\n\nWpisz kod poniżej: 6 liter z etykiety urządzenia. Home Assistant sprawdza go, logując się do urządzenia na porcie 8000, zanim go zapisze. Możesz też zmienić go w Konfiguruj → Obraz na żywo → Kod weryfikacyjny.",
+            "data": {
+              "code": "Kod weryfikacyjny"
+            }
+          }
+        },
+        "error": {
+          "empty_code": "Wpisz kod.",
+          "cannot_login": "Home Assistant nie mógł zalogować się do urządzenia na porcie 8000 tym kodem. Sprawdź 6 liter z etykiety urządzenia i czy Home Assistant jest w tej samej sieci LAN co wideodomofon.",
+          "invalid_code": "Urządzenie odrzuciło ten kod. Sprawdź 6 liter z etykiety urządzenia."
         },
         "abort": {
           "no_device": "Ten wideodomofon nie jest już skonfigurowany w Home Assistant."

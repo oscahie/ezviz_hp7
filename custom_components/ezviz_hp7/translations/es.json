@@ -369,7 +369,30 @@
         },
         "error": {
           "empty_code": "Introduce el código.",
-          "cannot_login": "Home Assistant no ha podido iniciar sesión en el dispositivo por el puerto 8000 con este código. Revisa las 6 letras de la etiqueta del dispositivo y que Home Assistant esté en la misma LAN que el videoportero."
+          "cannot_login": "Home Assistant no ha podido iniciar sesión en el dispositivo por el puerto 8000 con este código. Revisa las 6 letras de la etiqueta del dispositivo y que Home Assistant esté en la misma LAN que el videoportero.",
+          "invalid_code": "El dispositivo ha rechazado este código. Revisa las 6 letras de la etiqueta del dispositivo."
+        },
+        "abort": {
+          "no_device": "Ese videoportero ya no está configurado en Home Assistant."
+        }
+      }
+    },
+    "verification_code_rejected": {
+      "title": "{serial} ha rechazado el código de verificación",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "{serial} ha rechazado el código de verificación",
+            "description": "El dispositivo ha rechazado el inicio de sesión por el puerto 8000 con el código de verificación configurado, así que el vídeo en directo no puede arrancar. Para no bloquear el dispositivo, Home Assistant no vuelve a probar ese código hasta que se cambie.\n\nIntroduce el código abajo: las 6 letras de la etiqueta del dispositivo. Home Assistant lo comprueba iniciando sesión en el dispositivo por el puerto 8000 antes de guardarlo. También puedes cambiarlo en Configurar → Vídeo en directo → Código de verificación.",
+            "data": {
+              "code": "Código de verificación"
+            }
+          }
+        },
+        "error": {
+          "empty_code": "Introduce el código.",
+          "cannot_login": "Home Assistant no ha podido iniciar sesión en el dispositivo por el puerto 8000 con este código. Revisa las 6 letras de la etiqueta del dispositivo y que Home Assistant esté en la misma LAN que el videoportero.",
+          "invalid_code": "El dispositivo ha rechazado este código. Revisa las 6 letras de la etiqueta del dispositivo."
         },
         "abort": {
           "no_device": "Ese videoportero ya no está configurado en Home Assistant."

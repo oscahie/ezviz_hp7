@@ -369,7 +369,30 @@
         },
         "error": {
           "empty_code": "Enter the code.",
-          "cannot_login": "Home Assistant could not log in to the device on port 8000 with this code. Check the 6 letters on the device label, and that Home Assistant is on the same LAN as the doorbell."
+          "cannot_login": "Home Assistant could not log in to the device on port 8000 with this code. Check the 6 letters on the device label, and that Home Assistant is on the same LAN as the doorbell.",
+          "invalid_code": "The device refused this code. Check the 6 letters on the device label."
+        },
+        "abort": {
+          "no_device": "That doorbell is no longer set up in Home Assistant."
+        }
+      }
+    },
+    "verification_code_rejected": {
+      "title": "Verification code rejected by {serial}",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Verification code rejected by {serial}",
+            "description": "The device refused the log-in on port 8000 with the configured verification code, so the live view cannot start. To avoid locking the device, Home Assistant does not try that code again until it is changed.\n\nEnter the code below: the 6 letters on the device label. Home Assistant checks it by logging in to the device on port 8000 before saving it. You can also change it in Configure → Live video → Verification code.",
+            "data": {
+              "code": "Verification code"
+            }
+          }
+        },
+        "error": {
+          "empty_code": "Enter the code.",
+          "cannot_login": "Home Assistant could not log in to the device on port 8000 with this code. Check the 6 letters on the device label, and that Home Assistant is on the same LAN as the doorbell.",
+          "invalid_code": "The device refused this code. Check the 6 letters on the device label."
         },
         "abort": {
           "no_device": "That doorbell is no longer set up in Home Assistant."
