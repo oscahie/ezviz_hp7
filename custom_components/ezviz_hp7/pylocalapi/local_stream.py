@@ -155,6 +155,9 @@ class HcNetSdkCommandPortSocketStep:
     keepalive_frames: tuple[bytes, ...] = ()
     keepalive_interval_seconds: float = 5.0
     keepalive_initial_delay_seconds: float | None = None
+    # Keep resending the last keepalive frame after the list runs out, for
+    # as long as the stream is open (the SDK's 0x30006 heartbeat never stops).
+    keepalive_repeat_last: bool = False
     name: str | None = None
 
 
@@ -172,6 +175,9 @@ class HcNetSdkCommandPortGeneratedSocketStep:
     keepalive_templates: tuple[HcNetSdkCommandPortControlTemplate, ...] = ()
     keepalive_interval_seconds: float = 5.0
     keepalive_initial_delay_seconds: float | None = None
+    # Keep resending the last keepalive frame after the list runs out, for
+    # as long as the stream is open (the SDK's 0x30006 heartbeat never stops).
+    keepalive_repeat_last: bool = False
     name: str | None = None
 
     def to_socket_step(
@@ -212,6 +218,7 @@ class HcNetSdkCommandPortGeneratedSocketStep:
             ),
             keepalive_interval_seconds=self.keepalive_interval_seconds,
             keepalive_initial_delay_seconds=self.keepalive_initial_delay_seconds,
+            keepalive_repeat_last=self.keepalive_repeat_last,
             name=self.name,
         )
 
@@ -412,6 +419,9 @@ def hcnetsdk_command_port_native_lan_live_view_plan(
                     for delta in (10, 16, 22, 28, 34, 40)
                 ),
                 keepalive_interval_seconds=5.0,
+                # libHCPreview sends 0x30006 on the stream socket every 5 s
+                # for the whole preview (CGetStreamBase::DoExchange).
+                keepalive_repeat_last=True,
                 name="media",
             ),
             _hcnetsdk_generated_step(
@@ -864,7 +874,13 @@ class HcNetSdkCommandPortMultiSocketMediaStream:
             )
             if initial_delay > 0 and self._keepalive_stop.wait(initial_delay):
                 return
-            for index, frame in enumerate(step.keepalive_frames):
+            frames: Iterable[bytes] = step.keepalive_frames
+            if step.keepalive_repeat_last:
+                last = step.keepalive_frames[-1]
+                frames = chain(
+                    step.keepalive_frames, iter(lambda: last, None)
+                )
+            for index, frame in enumerate(frames):
                 if self._keepalive_stop.is_set():
                     return
                 command_id = (
@@ -896,7 +912,12 @@ class HcNetSdkCommandPortMultiSocketMediaStream:
                             sent=True,
                         )
                     )
-                if index == len(step.keepalive_frames) - 1:
+                # Bounded history: the heartbeat can run for hours.
+                del self.keepalive_events[:-64]
+                if (
+                    not step.keepalive_repeat_last
+                    and index == len(step.keepalive_frames) - 1
+                ):
                     return
                 if (
                     step.keepalive_interval_seconds > 0
