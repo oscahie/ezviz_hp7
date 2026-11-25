@@ -134,7 +134,7 @@ def test_empty_session_raises_login_rejected():
     assert session.session_id == b"\x00\x00\x00\x07"
 
 
-def test_rejected_login_stops_retries():
+async def test_rejected_login_stops_retries():
     relay = Hp7StreamRelay(
         api=MagicMock(), serial=SERIAL, channel=1, stream_source="local_sdk",
         verification_code="ZZZZZZ",
@@ -142,12 +142,8 @@ def test_rejected_login_stops_retries():
     relay._note_login_rejected(HcNetSdkLoginRejected("x"))
     assert relay._login_rejected
 
-    async def _go():
-        loop = asyncio.get_running_loop()
-        await relay._open_source(loop, MagicMock())
-
     with pytest.raises(RuntimeError, match="not retrying"):
-        asyncio.run(_go())
+        await relay._open_source(asyncio.get_running_loop(), MagicMock())
 
 
 def test_source_reports_rejection_to_the_relay():
