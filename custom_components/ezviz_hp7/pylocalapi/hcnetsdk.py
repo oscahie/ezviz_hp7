@@ -8213,6 +8213,15 @@ def decode_hcnetsdk_command_port_login_challenge(
     )
 
 
+class HcNetSdkLoginRejected(PyEzvizError):
+    """The device answered the command-port login proof without a session.
+
+    Raised only once the whole handshake went through, so the device is
+    reachable and refused these credentials; network failures surface as
+    socket errors instead.
+    """
+
+
 def parse_hcnetsdk_command_port_login_session(
     first_response: HcNetSdkTcpFrame,
     second_response: HcNetSdkTcpFrame,
@@ -8225,7 +8234,12 @@ def parse_hcnetsdk_command_port_login_session(
         len(second_response.body) < 4
         or second_response.body[:4] == HCNETSDK_COMMAND_PORT_EMPTY_SESSION_ID
     ):
-        raise PyEzvizError("HCNetSDK command-port login failed")
+        header = second_response.header
+        raise HcNetSdkLoginRejected(
+            "HCNetSDK command-port login failed (reply header "
+            f"{header.field_4:#x}/{header.field_8:#x}/{header.field_12:#x}, "
+            f"{len(second_response.body)}-byte body)"
+        )
     return HcNetSdkCommandPortLoginSession(
         session_id=second_response.body[:4],
         auth_seed=second_response.header.field_4,
