@@ -51,7 +51,6 @@ import queue
 import socket
 import threading
 import time
-from contextlib import closing
 from typing import TYPE_CHECKING, Any, Iterable, Iterator, List, Optional
 
 from homeassistant.components.camera import Camera
@@ -608,18 +607,22 @@ def _is_offline_error(exc: BaseException) -> bool:
     )
 
 
-def _free_local_port() -> int:
-    with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
+def _open_local_listener() -> tuple[socket.socket, int]:
+    """Bind a loopback listener on a kernel-chosen port and keep it open.
 
-
-def _start_local_listener(port: int) -> socket.socket:
+    Binding to port 0 and listening on that same socket avoids the old
+    "pick a free port, close it, bind again" race: closing the probe socket
+    let the second probe (or any other socket) get the very same port, and
+    the later bind failed with [Errno 98] Address in use.
+    """
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    s.bind(("127.0.0.1", port))
-    s.listen(1)
-    return s
+    try:
+        s.bind(("127.0.0.1", 0))
+        s.listen(1)
+    except OSError:
+        s.close()
+        raise
+    return s, s.getsockname()[1]
 
 
 def _reader_thread(
@@ -2250,10 +2253,8 @@ class Hp7StreamRelay:
                 # raw MP2 doesn't play over WebRTC either, so we keep video
                 # clean and stable and revisit audio once the real codec is
                 # identified from a capture.
-                raw_port = _free_local_port()
-                a_port = _free_local_port()
-                raw_listener = _start_local_listener(raw_port)
-                a_listener = _start_local_listener(a_port)
+                raw_listener, raw_port = _open_local_listener()
+                a_listener, a_port = _open_local_listener()
                 # Transcode HEVC -> H.264 so HA's WebRTC path shows a picture
                 # (HEVC copy = grey screen / decoder errors, #36 hehsni, #37
                 # Quenbo CP7). Transcode when the user forces hevc OR when
@@ -2336,10 +2337,8 @@ class Hp7StreamRelay:
                     "-f", "mpegts", "pipe:1",
                 ]
             else:
-                v_port = _free_local_port()
-                a_port = _free_local_port()
-                v_listener = _start_local_listener(v_port)
-                a_listener = _start_local_listener(a_port)
+                v_listener, v_port = _open_local_listener()
+                a_listener, a_port = _open_local_listener()
 
                 # Resolve the input codec + whether to transcode.
                 #   h264       -> input h264, copy
