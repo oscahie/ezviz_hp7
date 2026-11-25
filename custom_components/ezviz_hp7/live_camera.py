@@ -728,6 +728,14 @@ def _sender_thread(
                 "Hp7StreamRelay: ffmpeg %s input accept timed out", label
             )
             return
+        except OSError:
+            # The client was torn down while ffmpeg had not connected yet:
+            # closing the listener under accept() raises EBADF. Nothing to
+            # forward, so this is a normal exit, not an uncaught error.
+            _LOGGER.debug(
+                "Hp7StreamRelay: %s listener closed before ffmpeg connected", label
+            )
+            return
         _LOGGER.debug("Hp7StreamRelay: %s accepted from %s", label, peer)
     finally:
         try:
