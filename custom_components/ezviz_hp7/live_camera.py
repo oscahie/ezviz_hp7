@@ -189,9 +189,15 @@ class NetSdkLanSource:
     PORT = 8000
 
     def __init__(
-        self, api: "Hp7Api", serial: str, code: str, stream_quality: str = "main"
+        self,
+        api: "Hp7Api",
+        serial: str,
+        code: str,
+        stream_quality: str = "main",
+        on_login_rejected: Optional[Any] = None,
     ) -> None:
         self._api = api
+        self._on_login_rejected = on_login_rejected
         self._serial = serial
         self._code = code
         self._stream_type = 1 if stream_quality == "sub" else 0
@@ -201,7 +207,7 @@ class NetSdkLanSource:
 
     def start(self) -> "NetSdkLanSource":
         """Log in and open the media socket (blocking — run in an executor)."""
-        from .pylocalapi.hcnetsdk import HcNetSdkLanEndpoint
+        from .pylocalapi.hcnetsdk import HcNetSdkLanEndpoint, HcNetSdkLoginRejected
         from .pylocalapi.local_stream import (
             hcnetsdk_command_port_native_lan_live_view_plan,
             open_hcnetsdk_command_port_generated_multi_socket_stream,
@@ -230,8 +236,10 @@ class NetSdkLanSource:
         )
         try:
             stream.start()
-        except Exception:
+        except Exception as exc:
             stream.close()
+            if isinstance(exc, HcNetSdkLoginRejected) and self._on_login_rejected:
+                self._on_login_rejected(exc)
             raise
         self._stream = stream
         self._sock = stream.media_socket
@@ -887,6 +895,9 @@ class Hp7StreamRelay:
         code = (verification_code or "").strip()
         self._configured_key = (encryption_key or "").strip() or code
         self._login_code = code or self._configured_key
+        # Set once the device refuses that code on port 8000 (see
+        # _note_login_rejected); cleared only by a new relay.
+        self._login_rejected = False
         # The decoder syncs encrypted streams on a keyframe (PSM), so ffmpeg
         # gets the codec parameters right away. A long probe there only
         # buffers video, and a slow host never catches up on that delay.
@@ -1366,6 +1377,39 @@ class Hp7StreamRelay:
             "camera key (serial=%s)", self._serial,
         )
 
+    def _note_login_rejected(self, exc: Exception) -> None:
+        """The port-8000 log-in was refused (executor thread)."""
+        self._login_rejected = True
+        _LOGGER.warning(
+            "Hp7StreamRelay: the device rejected the log-in on port 8000 with "
+            "the configured verification code (serial=%s): %s. Not retrying "
+            "until the code is changed.",
+            self._serial, exc,
+        )
+        if self._hass is not None:
+            try:
+                self._hass.loop.call_soon_threadsafe(self._raise_rejected_repair)
+            except Exception:  # noqa: BLE001
+                pass
+
+    def _raise_rejected_repair(self) -> None:
+        """Repairs form asking for the right label code (loop thread)."""
+        try:
+            from homeassistant.helpers import issue_registry as ir
+
+            ir.async_create_issue(
+                self._hass,
+                DOMAIN,
+                f"{REJECTED_CODE_ISSUE}{self._serial}",
+                is_fixable=True,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key="verification_code_rejected",
+                translation_placeholders={"serial": self._serial},
+                data={"serial": self._serial},
+            )
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.debug("Hp7StreamRelay: could not raise code repair: %s", exc)
+
     def _serial_needs_otp(self) -> bool:
         """True when the cloud asked for elevation on the last key request."""
         try:
@@ -1661,8 +1705,17 @@ class Hp7StreamRelay:
             )
 
         def _open_lan_sdk():
+            if self._login_rejected:
+                # Each refused log-in counts towards the device's lock-out,
+                # so do not try the same code again until it is changed
+                # (which reloads the entry and builds a new relay).
+                raise RuntimeError(
+                    "the device rejected the verification code on port 8000; "
+                    "not retrying until it is changed"
+                )
             return NetSdkLanSource(
-                self._api, self._serial, self._login_code, self._stream_quality
+                self._api, self._serial, self._login_code, self._stream_quality,
+                on_login_rejected=self._note_login_rejected,
             )
 
         if self._stream_source == "cloud":
@@ -2754,6 +2807,9 @@ async def async_setup_live_entities(
         verification_code=str(data.get("verification_code") or ""),
         hass=hass,
     )
+    _sync_missing_code_issue(
+        hass, serial, stream_source, needs_code=not relay._login_code
+    )
     await relay.start()
     data["live_relay"] = relay
     # Let the coordinator see the relay so it can back polling off while
@@ -2823,6 +2879,51 @@ async def async_setup_live_entities(
         )
 
     async_add_entities(entities)
+
+
+MISSING_CODE_ISSUE = "verification_code_missing_"
+REJECTED_CODE_ISSUE = "verification_code_rejected_"
+
+
+def _sync_missing_code_issue(
+    hass: HomeAssistant, serial: str, stream_source: str, *, needs_code: bool
+) -> None:
+    """Raise or clear the Repairs issue for local_sdk without a code.
+
+    The port-8000 source logs in with the label's verification code (or the
+    video encryption password, which is the same until changed). With neither
+    set, NetSdkLanSource.start() refuses before touching the network, so the
+    live view can never start. That is known from the configuration alone,
+    so it is checked on every setup and cleared as soon as it no longer holds.
+    """
+    from homeassistant.helpers import issue_registry as ir
+
+    issue_id = f"{MISSING_CODE_ISSUE}{serial}"
+    try:
+        # A code that was refused is re-checked by this new relay on its
+        # first log-in, which raises the issue again if it still fails.
+        ir.async_delete_issue(hass, DOMAIN, f"{REJECTED_CODE_ISSUE}{serial}")
+        if stream_source == "local_sdk" and needs_code:
+            _LOGGER.warning(
+                "Hp7StreamRelay: stream source is local_sdk (port 8000) but no "
+                "verification code is configured (serial=%s); the live view "
+                "cannot start until it is entered in Configure.",
+                serial,
+            )
+            ir.async_create_issue(
+                hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=True,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key="verification_code_missing",
+                translation_placeholders={"serial": serial},
+                data={"serial": serial},
+            )
+        else:
+            ir.async_delete_issue(hass, DOMAIN, issue_id)
+    except Exception as exc:  # noqa: BLE001
+        _LOGGER.debug("Hp7StreamRelay: could not update the code issue: %s", exc)
 
 
 async def _resolve_auto_stream_mode(relay: "Hp7StreamRelay") -> str:

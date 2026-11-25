@@ -310,6 +310,50 @@
           "no_device": "Quel citofono non è più configurato in Home Assistant."
         }
       }
+    },
+    "verification_code_missing": {
+      "title": "Codice di verifica mancante per {serial}",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Serve il codice di verifica per {serial}",
+            "description": "La sorgente stream è \"Locale, porta 8000 del dispositivo\", che accede al dispositivo con il codice di verifica: le 6 lettere sull'etichetta del dispositivo. Nessun codice è configurato, quindi la diretta non può partire.\n\nInserisci il codice qui sotto. Home Assistant lo verifica accedendo al dispositivo sulla porta 8000 prima di salvarlo. Puoi anche inserirlo più tardi in Configura → Video live → Codice di verifica.",
+            "data": {
+              "code": "Codice di verifica"
+            }
+          }
+        },
+        "error": {
+          "empty_code": "Inserisci il codice.",
+          "cannot_login": "Home Assistant non è riuscito ad accedere al dispositivo sulla porta 8000 con questo codice. Controlla le 6 lettere sull'etichetta del dispositivo e che Home Assistant sia sulla stessa LAN del videocitofono.",
+          "invalid_code": "Il dispositivo ha rifiutato questo codice. Controlla le 6 lettere sull'etichetta del dispositivo."
+        },
+        "abort": {
+          "no_device": "Quel videocitofono non è più configurato in Home Assistant."
+        }
+      }
+    },
+    "verification_code_rejected": {
+      "title": "Codice di verifica rifiutato da {serial}",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Codice di verifica rifiutato da {serial}",
+            "description": "Il dispositivo ha rifiutato l'accesso sulla porta 8000 con il codice di verifica configurato, quindi la diretta non può partire. Per non bloccare il dispositivo, Home Assistant non riprova quel codice finché non viene cambiato.\n\nInserisci il codice qui sotto: le 6 lettere sull'etichetta del dispositivo. Home Assistant lo verifica accedendo al dispositivo sulla porta 8000 prima di salvarlo. Puoi anche cambiarlo in Configura → Video live → Codice di verifica.",
+            "data": {
+              "code": "Codice di verifica"
+            }
+          }
+        },
+        "error": {
+          "empty_code": "Inserisci il codice.",
+          "cannot_login": "Home Assistant non è riuscito ad accedere al dispositivo sulla porta 8000 con questo codice. Controlla le 6 lettere sull'etichetta del dispositivo e che Home Assistant sia sulla stessa LAN del videocitofono.",
+          "invalid_code": "Il dispositivo ha rifiutato questo codice. Controlla le 6 lettere sull'etichetta del dispositivo."
+        },
+        "abort": {
+          "no_device": "Quel videocitofono non è più configurato in Home Assistant."
+        }
+      }
     }
   },
   "exceptions": {

@@ -1,6 +1,7 @@
 """Repair flows for the EZVIZ HP7 integration.
 
-The only fixable issue so far is the encrypted-stream one (#47). On firmware
+Fixable issues: the label's verification code missing, or refused by the
+device, while port 8000 is used, and the encrypted-stream one (#47). On firmware
 that keeps Image/Video Encryption on with no toggle in the app, the cloud
 refuses to hand the decryption key to an un-elevated session and answers
 20002 — and that refusal is itself what makes EZVIZ e-mail a 4-digit code
@@ -19,7 +20,7 @@ from homeassistant import data_entry_flow
 from homeassistant.components.repairs import RepairsFlow
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_ENCRYPTION_KEY, DOMAIN
+from .const import CONF_ENCRYPTION_KEY, CONF_VERIFICATION_CODE, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -91,6 +92,79 @@ class EncryptionOtpRepairFlow(RepairsFlow):
         )
 
 
+class VerificationCodeRepairFlow(RepairsFlow):
+    """Ask for the label's code (missing or refused), check it, store it."""
+
+    def __init__(self, serial: str) -> None:
+        """Remember which doorbell this flow is fixing."""
+        self._serial = serial
+
+    async def async_step_init(
+        self, user_input: dict[str, str] | None = None
+    ) -> data_entry_flow.FlowResult:
+        """Entry point — go straight to the code form."""
+        return await self.async_step_confirm()
+
+    async def async_step_confirm(
+        self, user_input: dict[str, str] | None = None
+    ) -> data_entry_flow.FlowResult:
+        """Log in on port 8000 with the code; store it only if that works."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            code = str(user_input.get("code", "")).strip()
+            entry, api = _resolve_entry(self.hass, self._serial)
+            if api is None or entry is None:
+                return self.async_abort(reason="no_device")
+            if not code:
+                errors["code"] = "empty_code"
+            elif (
+                result := await self.hass.async_add_executor_job(
+                    _port_8000_login, api, self._serial, code
+                )
+            ) == "ok":
+                # Saving the options reloads the entry, whose setup clears
+                # the issue now that a code is configured.
+                self.hass.config_entries.async_update_entry(
+                    entry,
+                    options={**entry.options, CONF_VERIFICATION_CODE: code},
+                )
+                return self.async_create_entry(title="", data={})
+            else:
+                errors["code"] = result
+
+        return self.async_show_form(
+            step_id="confirm",
+            data_schema=vol.Schema({vol.Required("code", default=""): str}),
+            errors=errors,
+            description_placeholders={"serial": self._serial},
+        )
+
+
+def _port_8000_login(api: Any, serial: str, code: str) -> str:
+    """Open and close a port-8000 session with this code (blocking).
+
+    Returns "ok", "invalid_code" when the device refused the code, or
+    "cannot_login" for any other failure (device not reachable, ...).
+    """
+    from .live_camera import NetSdkLanSource
+    from .pylocalapi.hcnetsdk import HcNetSdkLoginRejected
+
+    source = NetSdkLanSource(api, serial, code)
+    try:
+        source.start()
+    except Exception as exc:  # noqa: BLE001
+        _LOGGER.warning(
+            "EZVIZ HP7: port-8000 log-in with the entered code failed for %s: %s",
+            serial, exc,
+        )
+        if isinstance(exc, HcNetSdkLoginRejected):
+            return "invalid_code"
+        return "cannot_login"
+    finally:
+        source.close()
+    return "ok"
+
+
 def _resolve_entry(hass: HomeAssistant, serial: str) -> tuple[Any, Any]:
     """Find the config entry and API client that own this serial."""
     for entry_id, data in hass.data.get(DOMAIN, {}).items():
@@ -107,6 +181,9 @@ async def async_create_fix_flow(
 ) -> RepairsFlow:
     """Build the flow for a fixable issue."""
     serial = str((data or {}).get("serial") or "")
+    for prefix in ("verification_code_missing_", "verification_code_rejected_"):
+        if issue_id.startswith(prefix):
+            return VerificationCodeRepairFlow(serial or issue_id[len(prefix):])
     if not serial and issue_id.startswith("encryption_otp_"):
         serial = issue_id[len("encryption_otp_"):]
     return EncryptionOtpRepairFlow(serial)
