@@ -351,6 +351,10 @@
         }
       }
     },
+    "channel99_unavailable": {
+      "title": "Doorbell calls via polling only ({serial})",
+      "description": "Home Assistant could not use EZVIZ's \"channel 99\" push for {serial} ({reason}). Channel 99 is the link the mobile app gets doorbell calls on; without it, unlocks still arrive by the regular push but rings are only seen by polling, up to 15 s late.\n\nCommon causes: the account asks for a verification code when logging in from a new phone, or the password changed. Log in to the EZVIZ app with this account once, then reload the integration. It is retried automatically every few hours."
+    },
     "verification_code_missing": {
       "title": "Verification code missing for {serial}",
       "fix_flow": {
