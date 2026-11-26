@@ -351,6 +351,10 @@
         }
       }
     },
+    "channel99_unavailable": {
+      "title": "Llamadas del timbre solo por sondeo ({serial})",
+      "description": "Home Assistant no ha podido usar el push \"canal 99\" de EZVIZ para {serial} ({reason}). El canal 99 es por donde la app recibe las llamadas del timbre; sin él, las aperturas siguen llegando por el push normal, pero los timbrazos solo se ven al sondear, con hasta 15 s de retraso.\n\nCausas habituales: la cuenta pide un código de verificación al iniciar sesión desde un móvil nuevo, o la contraseña ha cambiado. Inicia sesión una vez en la app EZVIZ con esta cuenta y recarga la integración. Se reintenta solo cada pocas horas."
+    },
     "verification_code_missing": {
       "title": "Falta el código de verificación de {serial}",
       "fix_flow": {
