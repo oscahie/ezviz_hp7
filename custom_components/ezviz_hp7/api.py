@@ -117,6 +117,8 @@ class Hp7Api:
         self.key_needs_otp: set[str] = set()
         self._feature_logged: set[str] = set()
         self._switch_logged: set[str] = set()
+        # serial -> (local index, resource, KeypadLinkageParam) of the keypad.
+        self._keypad: dict[str, tuple[str, str, dict[str, Any]]] = {}
         # Set when the entry started without the EZVIZ cloud: the LAN IP and
         # camera key come only from what was stored on disk, and nothing
         # tries to log in on the way (each attempt would stall a stream
@@ -893,6 +895,90 @@ class Hp7Api:
     _PRIVACY_SWITCH_TYPE = 7
     # SwitchType.CHIME_INDICATOR_LIGHT (HP7 doorbell label/name LED) = 611.
     _LABEL_LIGHT_SWITCH_TYPE = 611
+    # The light at the call button ("Doorbell indicator" in the EZVIZ app);
+    # reported as switch type 3 by the HP7 Pro door station.
+    _INDICATOR_LIGHT_SWITCH_TYPE = 3
+    # HP7 Pro keypad: FEATURE_INFO[<idx>][<resource>]["KeypadMgr"]
+    # ["KeypadLinkageParam"] holds the backlight and the button sound
+    # together ({"soundPromptParam": {"buttonSound": …},
+    # "LEDPromptParam": {"backlightEnabled": …}}), seen on the HP7 Pro at
+    # FEATURE_INFO["1"]["Video"].
+    _KEYPAD_DOMAIN = "KeypadMgr"
+    _KEYPAD_ACTION = "KeypadLinkageParam"
+
+    @classmethod
+    def _find_keypad(cls, info: dict[str, Any]) -> tuple[str, str, dict[str, Any]] | None:
+        """(local index, resource, KeypadLinkageParam) of a door station with a keypad."""
+        tree = info.get("FEATURE_INFO")
+        if not isinstance(tree, dict):
+            return None
+        for index, resources in tree.items():
+            if not isinstance(resources, dict):
+                continue
+            for resource, domains in resources.items():
+                keypad = domains.get(cls._KEYPAD_DOMAIN) if isinstance(domains, dict) else None
+                params = keypad.get(cls._KEYPAD_ACTION) if isinstance(keypad, dict) else None
+                if isinstance(params, dict):
+                    return str(index), str(resource), params
+        return None
+
+    @staticmethod
+    def _has_code_lockout(info: dict[str, Any]) -> bool:
+        """Whether FEATURE_INFO has DoorLockMgr.TryErrLock (wrong-code lock-out)."""
+        stack: list[Any] = [info.get("FEATURE_INFO")]
+        while stack:
+            obj = stack.pop()
+            if isinstance(obj, dict):
+                manager = obj.get("DoorLockMgr")
+                if isinstance(manager, dict) and "TryErrLock" in manager:
+                    return True
+                stack.extend(obj.values())
+        return False
+
+    def set_indicator_light(self, serial: str, enable: bool) -> bool:
+        """Toggle the light at the call button (switch type 3)."""
+        self.ensure_client()
+        if not self._client:
+            return False
+        try:
+            self._client.switch_status(
+                serial, self._INDICATOR_LIGHT_SWITCH_TYPE, bool(enable)
+            )
+            return True
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.warning("EZVIZ HP7: indicator light switch failed: %s", exc)
+            return False
+
+    def set_keypad_backlight(self, serial: str, enable: bool) -> bool:
+        """Toggle the HP7 Pro keypad backlight.
+
+        The setting is written back whole (button sound included) with only
+        the backlight changed, at the path the last status read found.
+        """
+        self.ensure_client()
+        if not self._client:
+            return False
+        index, resource, current = self._keypad.get(serial) or ("1", "Video", {})
+        params = json.loads(json.dumps(current)) if isinstance(current, dict) else {}
+        led = params.get("LEDPromptParam")
+        if not isinstance(led, dict):
+            led = params["LEDPromptParam"] = {}
+        led["backlightEnabled"] = bool(enable)
+        try:
+            resp = self._client.set_iot_feature(
+                serial,
+                resource_identifier=resource,
+                local_index=index,
+                domain_id=self._KEYPAD_DOMAIN,
+                action_id=self._KEYPAD_ACTION,
+                value={"value": params},
+            )
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.warning("EZVIZ HP7: keypad backlight write failed: %s", exc)
+            return False
+        _LOGGER.debug("EZVIZ HP7: keypad backlight enable=%s -> %s", enable, resp)
+        self._keypad[serial] = (index, resource, params)
+        return True
 
     def set_dnd(self, serial: str, enable: bool) -> bool:
         """Toggle Do-Not-Disturb on the device."""
@@ -1503,6 +1589,10 @@ class Hp7Api:
                     coerced = self._coerce_bool(sw.get("enable"))
                     if coerced is not None:
                         out["label_light_on"] = coerced
+                elif s_type == self._INDICATOR_LIGHT_SWITCH_TYPE:
+                    coerced = self._coerce_bool(sw.get("enable"))
+                    if coerced is not None:
+                        out["indicator_light_on"] = coerced
 
         # HPD7 name-plate LED lives in the IoT FEATURE tree, not SWITCH 611
         # (#34): FEATURE_INFO["1"]["LightCtrl"]["NightLightEnable"]. When
@@ -1517,6 +1607,21 @@ class Hp7Api:
         # rejects the writes), so they're surfaced as sensors only, and only
         # when the device actually reports them.
         out.update(self._read_feature_states(info))
+
+        keypad = self._find_keypad(info)
+        # The old HP7 (CS-HPD7-R100) reports the same KeypadMgr block as the
+        # HP7 Pro (CS-HPD7-R400) although it has no keypad. Only the Pro
+        # reports the wrong-code lock-out (DoorLock/DoorLockMgr/TryErrLock),
+        # which only a keypad needs, so take that as the sign of one.
+        if keypad is not None and not self._has_code_lockout(info):
+            keypad = None
+        if keypad is not None:
+            self._keypad[serial] = keypad
+            led = keypad[2].get("LEDPromptParam")
+            if isinstance(led, dict):
+                coerced = self._coerce_bool(led.get("backlightEnabled"))
+                if coerced is not None:
+                    out["keypad_backlight_on"] = coerced
 
         status = info.get("STATUS") or {}
         if isinstance(status, dict):
