@@ -922,6 +922,19 @@ class Hp7Api:
                     return str(index), str(resource), params
         return None
 
+    @staticmethod
+    def _has_code_lockout(info: dict[str, Any]) -> bool:
+        """Whether FEATURE_INFO has DoorLockMgr.TryErrLock (wrong-code lock-out)."""
+        stack: list[Any] = [info.get("FEATURE_INFO")]
+        while stack:
+            obj = stack.pop()
+            if isinstance(obj, dict):
+                manager = obj.get("DoorLockMgr")
+                if isinstance(manager, dict) and "TryErrLock" in manager:
+                    return True
+                stack.extend(obj.values())
+        return False
+
     def set_indicator_light(self, serial: str, enable: bool) -> bool:
         """Toggle the light at the call button (switch type 3)."""
         self.ensure_client()
@@ -1611,6 +1624,12 @@ class Hp7Api:
         out.update(self._read_feature_states(info))
 
         keypad = self._find_keypad(info)
+        # The old HP7 (CS-HPD7-R100) reports the same KeypadMgr block as the
+        # HP7 Pro (CS-HPD7-R400) although it has no keypad. Only the Pro
+        # reports the wrong-code lock-out (DoorLock/DoorLockMgr/TryErrLock),
+        # which only a keypad needs, so take that as the sign of one.
+        if keypad is not None and not self._has_code_lockout(info):
+            keypad = None
         if keypad is not None:
             self._keypad[serial] = keypad
             led = keypad[2].get("LEDPromptParam")

@@ -10,7 +10,12 @@ SERIAL = "BK0000000-BK0000001"
 # Shape read from a real HP7 Pro door station (values anonymised).
 INFO = {
     "FEATURE_INFO": {
-        "0": {"DoorLock": {"LightCtrl": {}}},
+        "0": {
+            "DoorLock": {
+                "LightCtrl": {},
+                "DoorLockMgr": {"TryErrLock": {"enabled": True, "errCount": 5}},
+            }
+        },
         "1": {
             "Video": {
                 "LightCtrl": {},
@@ -73,3 +78,14 @@ def test_indicator_write_uses_switch_type_3():
     api = _api()
     assert api.set_indicator_light(SERIAL, False)
     api._client.switch_status.assert_called_once_with(SERIAL, 3, False)
+
+
+def test_old_hp7_reports_keypad_block_but_has_no_keypad():
+    """CS-HPD7-R100: same KeypadMgr block, no wrong-code lock-out, no keypad."""
+    old = {
+        "FEATURE_INFO": {"1": INFO["FEATURE_INFO"]["1"]},
+        "SWITCH": [{"type": 3, "enable": True}],
+    }
+    out = _api()._parse_extra_states(SERIAL, old)
+    assert "keypad_backlight_on" not in out
+    assert out["indicator_light_on"] is True

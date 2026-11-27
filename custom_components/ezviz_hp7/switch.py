@@ -37,6 +37,16 @@ async def async_setup_entry(hass, entry, async_add_entities):
         entities.append(EzvizHp7IndicatorLightSwitch(coordinator, api, serial, model))
     if "keypad_backlight_on" in status:
         entities.append(EzvizHp7KeypadBacklightSwitch(coordinator, api, serial, model))
+    else:
+        # An earlier version made it for door stations without a keypad.
+        from homeassistant.helpers import entity_registry as er
+
+        registry = er.async_get(hass)
+        stale = registry.async_get_entity_id(
+            "switch", DOMAIN, f"{DOMAIN}_{serial}_keypad_backlight"
+        )
+        if stale:
+            registry.async_remove(stale)
     entities.append(EzvizHp7ChimePirSwitch(coordinator, api, serial, model=model))
 
     # Per-monitor switches (multi-monitor for HP7 bifamigliare).
