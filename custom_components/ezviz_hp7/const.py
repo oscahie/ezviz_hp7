@@ -4,6 +4,13 @@ DOMAIN = "ezviz_hp7"
 CONF_REGION = "region"
 CONF_SERIAL = "serial"
 CONF_MONITOR_SERIAL = "monitor_serial"
+# Optional login of the EZVIZ account that OWNS the indoor monitor(s). Needed
+# when the entry runs on a shared account: the cloud lets a shared account see
+# the monitor but refuses it the monitor's settings (ChimeMusic -> HTTP 403),
+# so the monitor ring switch would stay "unknown". Used only for the monitor's
+# ChimeMusic (ring on/off, volume, ringtones); nothing else, no push.
+CONF_OWNER_USERNAME = "monitor_owner_username"
+CONF_OWNER_PASSWORD = "monitor_owner_password"
 # Fix the local TCP port the live-stream relay listens on. Default = 0 means
 # "pick a free port at startup"; set a constant value (e.g. 8554) so external
 # tools like go2rtc, mediamtx or Frigate can keep a stable URL across HA

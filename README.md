@@ -81,6 +81,7 @@ Remove unused devices to free at least one slot.
 - **Switches** — *(beta)* below means wired against the EZVIZ API and working for the author, but **not yet confirmed by a second user on different firmware**; report back either way
   - 🔔 `chime_sound` — doorbell button chime on the camera unit
   - 🔔 `chime_sound_monitor` — chime on each configured indoor monitor (multi-monitor friendly — HP7 bifamigliare)
+    - On an entry that uses a **shared** EZVIZ account, the cloud refuses that account the monitor's settings (HTTP 403), so the monitor switches stay *unknown*. Fill in **Monitor owner account** in Configure with the account that owns the monitor: it is used only for the monitor's ring settings (on/off, volume, ringtones); push and everything else stay on the entry's account.
   - 🛎️ `chime_pir` / `chime_pir_monitor` — motion sound notification on / off
   - 💡 `label_light` — the LED that illuminates the name-tag plate. On HPD7 this is the IoT `LightCtrl/NightLightEnable` property (read **and** write confirmed on hardware); older HP7 firmware uses switch type 611
   - 🌙 `dnd` — *(beta)* Do-Not-Disturb. Set per EZVIZ **account**, not per device: on = this account gets no alarm pushes (`NODISTURB.alarmEnable`)

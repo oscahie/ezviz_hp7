@@ -119,6 +119,32 @@ class Hp7Api:
         self._switch_logged: set[str] = set()
         # serial -> (local index, resource, KeypadLinkageParam) of the keypad.
         self._keypad: dict[str, tuple[str, str, dict[str, Any]]] = {}
+        # Optional second client logged in with the EZVIZ account that OWNS
+        # the indoor monitor(s). A shared account sees the monitor in its
+        # device list, but the cloud refuses it the monitor's settings
+        # (ChimeMusic read/write -> HTTP 403 "current user has no access to
+        # resource"), so the monitor's ChimeMusic (ring on/off, volume,
+        # ringtones) goes through this client for the serials listed.
+        self._owner: Hp7Api | None = None
+        self._owner_serials: set[str] = set()
+
+    def set_owner_account(self, owner: "Hp7Api | None", serials: Any) -> None:
+        """Route the given monitor serials' ChimeMusic through ``owner``."""
+        self._owner = owner
+        self._owner_serials = {
+            s.strip() for s in (serials or []) if isinstance(s, str) and s.strip()
+        }
+        # Serials marked unreachable through the shared account get a new try.
+        for s in self._owner_serials:
+            self._chime_dead_serials.discard(s)
+            self._chime_fail_counts.pop(s, None)
+            self._chime_config_cache.pop(s, None)
+
+    def _chime_api(self, serial: str) -> "Hp7Api":
+        """The client whose account may read/write ``serial``'s ChimeMusic."""
+        if self._owner is not None and serial in self._owner_serials:
+            return self._owner
+        return self
 
 
     @property
@@ -344,6 +370,9 @@ class Hp7Api:
 
     def close(self) -> None:
         """Close API connection and cleanup resources."""
+        if self._owner is not None:
+            self._owner.close()
+            self._owner = None
         if self._client:
             try:
                 self._client.logout()
@@ -685,8 +714,9 @@ class Hp7Api:
         non-monitor serial used to escape and tank the whole coordinator
         update, see #33 Sergio CP5).
         """
-        self.ensure_client()
-        if not self._client:
+        api = self._chime_api(serial)
+        api.ensure_client()
+        if not api._client:
             return None
         if serial in self._chime_dead_serials:
             return None
@@ -706,7 +736,7 @@ class Hp7Api:
         if cached is not None and (time.monotonic() - cached[1]) < CHIME_CACHE_TTL:
             return cached[0]
         try:
-            result = self._client.get_dev_config(serial, 1, "ChimeMusic")
+            result = api._client.get_dev_config(serial, 1, "ChimeMusic")
         except Exception as exc:  # noqa: BLE001
             _LOGGER.debug(
                 "EZVIZ HP7: get_dev_config(ChimeMusic, %s) failed: %s",
@@ -752,19 +782,20 @@ class Hp7Api:
 
     def _set_chime_fields(self, serial: str, **fields: int) -> bool:
         """Patch one or more ChimeMusic fields, preserving the rest."""
-        self.ensure_client()
-        if not self._client:
+        api = self._chime_api(serial)
+        api.ensure_client()
+        if not api._client:
             return False
         current = self._get_chime_config(serial) or {}
         config = {**self._CHIME_DEFAULTS, **current, **fields}
         value = json.dumps(config, separators=(",", ":"))
         url = (
-            f"https://{self._url}/v3/devconfig/v1/keyValue"
+            f"https://{api._url}/v3/devconfig/v1/keyValue"
             f"/{serial}/1/op"
         )
         params = {"key": "ChimeMusic", "value": value}
         try:
-            resp = self._client._session.put(url, params=params, timeout=15)
+            resp = api._client._session.put(url, params=params, timeout=15)
             resp.raise_for_status()
             # Drop the cached blob so the next read reflects the new value.
             self._chime_config_cache.pop(serial, None)
@@ -841,20 +872,21 @@ class Hp7Api:
 
     def set_chime_volume(self, serial: str, volume: int) -> bool:
         """Set ChimeMusic volume (0-VOLUME_MAX), preserving other fields."""
-        self.ensure_client()
-        if not self._client:
+        api = self._chime_api(serial)
+        api.ensure_client()
+        if not api._client:
             return False
         volume = max(0, min(self.VOLUME_MAX, int(volume)))
         current = self._get_chime_config(serial) or {}
         config = {**self._CHIME_DEFAULTS, **current, "volume": volume}
         value = json.dumps(config, separators=(",", ":"))
         url = (
-            f"https://{self._url}/v3/devconfig/v1/keyValue"
+            f"https://{api._url}/v3/devconfig/v1/keyValue"
             f"/{serial}/1/op"
         )
         params = {"key": "ChimeMusic", "value": value}
         try:
-            resp = self._client._session.put(url, params=params, timeout=15)
+            resp = api._client._session.put(url, params=params, timeout=15)
             resp.raise_for_status()
             self._chime_config_cache.pop(serial, None)
             return True

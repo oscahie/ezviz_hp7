@@ -12,6 +12,9 @@ from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
 )
 
 from .api import Hp7Api
@@ -20,6 +23,8 @@ from .const import (
     CONF_REGION,
     CONF_SERIAL,
     CONF_MONITOR_SERIAL,
+    CONF_OWNER_USERNAME,
+    CONF_OWNER_PASSWORD,
     CONF_RELAY_PORT,
     CONF_RELAY_BIND,
     DEFAULT_RELAY_BIND,
@@ -49,7 +54,8 @@ CONF_SMS_CODE = "sms_code"
 # only the form nests them.
 SECTION_VIDEO = "video"
 SECTION_ADVANCED = "advanced"
-_SECTIONS = (SECTION_VIDEO, SECTION_ADVANCED)
+SECTION_MONITOR_OWNER = "monitor_owner"
+_SECTIONS = (SECTION_VIDEO, SECTION_ADVANCED, SECTION_MONITOR_OWNER)
 
 
 def _radio(options: list[str], translation_key: str) -> SelectSelector:
@@ -358,8 +364,23 @@ class OptionsFlow(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Manage options."""
+        errors: dict[str, str] = {}
         if user_input is not None:
             user_input = _flatten_sections(user_input)
+            owner_user = str(user_input.get(CONF_OWNER_USERNAME) or "").strip()
+            owner_pass = str(user_input.get(CONF_OWNER_PASSWORD) or "")
+            if owner_user and not owner_pass:
+                errors["base"] = "owner_password_missing"
+            elif owner_user:
+                errors.update(
+                    await self.hass.async_add_executor_job(
+                        _check_owner_login,
+                        owner_user,
+                        owner_pass,
+                        self.config_entry.data.get(CONF_REGION, "eu"),
+                    )
+                )
+        if user_input is not None and not errors:
             monitor = (user_input.get(CONF_MONITOR_SERIAL) or "").strip()
             try:
                 relay_port = int(user_input.get(CONF_RELAY_PORT) or 0)
@@ -410,6 +431,8 @@ class OptionsFlow(config_entries.OptionsFlow):
                     CONF_DIAGNOSTIC_DUMPS: dumps,
                     CONF_ENCRYPTION_KEY: enc_key,
                     CONF_VERIFICATION_CODE: verify_code,
+                    CONF_OWNER_USERNAME: owner_user,
+                    CONF_OWNER_PASSWORD: owner_pass if owner_user else "",
                 },
             )
 
@@ -553,9 +576,30 @@ class OptionsFlow(config_entries.OptionsFlow):
                 ): bool,
             }
         )
+        current_owner_user = str(
+            self.config_entry.options.get(CONF_OWNER_USERNAME) or ""
+        )
+        current_owner_pass = str(
+            self.config_entry.options.get(CONF_OWNER_PASSWORD) or ""
+        )
+        monitor_owner = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_OWNER_USERNAME, default=current_owner_user
+                ): str,
+                vol.Optional(
+                    CONF_OWNER_PASSWORD, default=current_owner_pass
+                ): TextSelector(
+                    TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                ),
+            }
+        )
         schema = vol.Schema(
             {
                 vol.Optional(CONF_MONITOR_SERIAL, default=current or ""): str,
+                vol.Required(SECTION_MONITOR_OWNER): section(
+                    monitor_owner, {"collapsed": not current_owner_user}
+                ),
                 vol.Required(SECTION_VIDEO): section(
                     video, {"collapsed": False}
                 ),
@@ -564,4 +608,24 @@ class OptionsFlow(config_entries.OptionsFlow):
                 ),
             }
         )
-        return self.async_show_form(step_id="init", data_schema=schema)
+        return self.async_show_form(
+            step_id="init", data_schema=schema, errors=errors
+        )
+
+
+def _check_owner_login(username: str, password: str, region: str) -> dict[str, str]:
+    """Log in once with the monitor owner's account; return form errors."""
+    api = Hp7Api(username, password, region)
+    try:
+        api.login()
+    except EzvizAuthVerificationCode:
+        return {"base": "owner_mfa"}
+    except Exception as exc:  # noqa: BLE001
+        _LOGGER.debug("EZVIZ HP7: monitor owner login failed: %s", exc)
+        return {"base": "owner_auth"}
+    finally:
+        try:
+            api.close()
+        except Exception:  # noqa: BLE001
+            pass
+    return {}

@@ -13,6 +13,8 @@ from .const import (
     DOMAIN,
     PLATFORMS,
     CONF_MONITOR_SERIAL,
+    CONF_OWNER_USERNAME,
+    CONF_OWNER_PASSWORD,
     CONF_RELAY_PORT,
     CONF_RELAY_BIND,
     DEFAULT_RELAY_BIND,
@@ -170,6 +172,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # HA core's own resolver was timing out).
         _LOGGER.debug("EZVIZ HP7 setup deferred: %s", exc)
         raise ConfigEntryNotReady(f"Cannot connect to EZVIZ HP7: {exc}") from exc
+
+    # Monitor owner account (optional): a shared account gets 403 on the
+    # monitor's ChimeMusic, so route those reads/writes through the owner.
+    owner_user = str(entry.options.get(CONF_OWNER_USERNAME) or "").strip()
+    owner_pass = str(entry.options.get(CONF_OWNER_PASSWORD) or "")
+    if owner_user and owner_pass and monitor_serial:
+        owner_api = Hp7Api(owner_user, owner_pass, region)
+        try:
+            await hass.async_add_executor_job(owner_api.login)
+        except Exception as exc:  # noqa: BLE001
+            # Not fatal: the rest of the entry works on its own account; the
+            # monitor switches just stay unknown as without this option.
+            _LOGGER.warning(
+                "EZVIZ HP7: monitor owner account login failed, monitor "
+                "settings stay unavailable: %s",
+                exc,
+            )
+        else:
+            api.set_owner_account(owner_api, monitor_serial)
 
     # Detect device model (HP7 / CP7 / ...) from the cloud so DeviceInfo
     # shows the right label. Falls back to DEFAULT_MODEL on any error.
