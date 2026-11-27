@@ -117,6 +117,29 @@ class Hp7Api:
         self.key_needs_otp: set[str] = set()
         self._feature_logged: set[str] = set()
         self._switch_logged: set[str] = set()
+        # Set when the entry started without the EZVIZ cloud: the LAN IP and
+        # camera key come only from what was stored on disk, and nothing
+        # tries to log in on the way (each attempt would stall a stream
+        # start until the cloud request times out).
+        self.offline = False
+
+    def seed_local(self, serial: str, ip: str | None, camera_key: str | None) -> None:
+        """Preload the LAN IP and camera key remembered from an earlier run."""
+        bare = self._bare_serial(serial)
+        if ip:
+            self._lan_ip_cache[bare] = str(ip)
+        if camera_key:
+            self._cam_key_cache[bare] = str(camera_key)
+
+    def remembered_local(self, serial: str) -> dict[str, str]:
+        """What the port-8000 stream needs without the cloud, as known now."""
+        bare = self._bare_serial(serial)
+        out: dict[str, str] = {}
+        if self._lan_ip_cache.get(bare):
+            out["ip"] = self._lan_ip_cache[bare]
+        if self._cam_key_cache.get(bare):
+            out["camera_key"] = self._cam_key_cache[bare]
+        return out
 
 
     @property
@@ -497,6 +520,8 @@ class Hp7Api:
         source doesn't depend on the cloud being healthy on every open.
         """
         bare = self._bare_serial(serial)
+        if self.offline:
+            return self._lan_ip_cache.get(bare)
         try:
             self.ensure_client()
             if not self._client:
@@ -1070,6 +1095,8 @@ class Hp7Api:
         cached = self._cam_key_cache.get(bare)
         if cached is not None:
             return cached
+        if self.offline:
+            return None
         self.ensure_client()
         if not self._client:
             return None

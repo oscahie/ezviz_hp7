@@ -398,6 +398,10 @@
           "no_device": "Ese videoportero ya no está configurado en Home Assistant."
         }
       }
+    },
+    "cloud_offline": {
+      "title": "No se puede contactar con EZVIZ",
+      "description": "{title} ha arrancado sin la nube de EZVIZ. Solo funciona el vídeo en directo por la red local (puerto 8000), con la dirección IP y la clave guardadas la última vez que respondió la nube. Los eventos, la apertura, el botón de colgar y los ajustes vuelven solos: el inicio de sesión se reintenta cada 5 minutos y la integración se recarga cuando EZVIZ responde."
     }
   },
   "exceptions": {

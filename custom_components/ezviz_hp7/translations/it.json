@@ -358,6 +358,10 @@
           "no_device": "Quel videocitofono non è più configurato in Home Assistant."
         }
       }
+    },
+    "cloud_offline": {
+      "title": "EZVIZ non raggiungibile",
+      "description": "{title} è stato avviato senza il cloud EZVIZ. Funziona solo il video in diretta sulla rete locale (porta 8000), con l'indirizzo IP e la chiave salvati l'ultima volta che il cloud ha risposto. Eventi, apertura, il pulsante per riagganciare e le impostazioni tornano da soli: l'accesso viene ritentato ogni 5 minuti e l'integrazione si ricarica quando EZVIZ risponde."
     }
   },
   "exceptions": {
