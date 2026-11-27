@@ -332,9 +332,22 @@
               "aggressive_mpegts": "Actívalo solo si en los logs ves 'Immediate exit requested'.",
               "diagnostic_dumps": "Escribe dos archivos .bin en /config con el inicio del stream, para reportar un problema de vídeo. Déjalo apagado en uso normal."
             }
+          },
+          "monitor_owner": {
+            "name": "Cuenta propietaria del monitor",
+            "description": "Solo si esta entrada usa una cuenta EZVIZ COMPARTIDA. EZVIZ deja ver el monitor interior a una cuenta compartida pero le niega sus ajustes, así que los interruptores del monitor quedan en desconocido. Introduce la cuenta propietaria del monitor: se usa solo para leer y cambiar los ajustes de timbre del monitor (timbre sí/no, volumen, tonos). Todo lo demás, push incluido, sigue con la cuenta de esta entrada. Déjalo vacío en otro caso.",
+            "data": {
+              "monitor_owner_username": "Cuenta propietaria (e-mail o teléfono)",
+              "monitor_owner_password": "Contraseña de la cuenta propietaria"
+            }
           }
         }
       }
+    },
+    "error": {
+      "owner_auth": "No se pudo iniciar sesión con la cuenta propietaria del monitor. Revisa el e-mail y la contraseña (misma región que esta entrada).",
+      "owner_mfa": "La cuenta propietaria del monitor pide un código de verificación al iniciar sesión, y esta opción aún no lo admite.",
+      "owner_password_missing": "Introduce la contraseña de la cuenta propietaria del monitor."
     }
   },
   "issues": {

@@ -332,9 +332,22 @@
               "aggressive_mpegts": "Turn on only if the logs show 'Immediate exit requested'.",
               "diagnostic_dumps": "Writes two .bin files in /config with the start of the stream, for reporting a video problem. Leave off in normal use."
             }
+          },
+          "monitor_owner": {
+            "name": "Monitor owner account",
+            "description": "Only if this entry uses a SHARED EZVIZ account. EZVIZ shows a shared account the indoor monitor but refuses it the monitor's settings, so the monitor switches stay unknown. Enter the account that owns the monitor: it is used only to read and change the monitor's ring settings (ring on/off, volume, ringtones). Everything else, push included, stays on this entry's account. Leave empty otherwise.",
+            "data": {
+              "monitor_owner_username": "Owner account (e-mail or phone)",
+              "monitor_owner_password": "Owner account password"
+            }
           }
         }
       }
+    },
+    "error": {
+      "owner_auth": "Could not log in with the monitor owner account. Check the e-mail and password (same region as this entry).",
+      "owner_mfa": "The monitor owner account asks for a verification code at login, which this option does not support yet.",
+      "owner_password_missing": "Enter the monitor owner account password."
     }
   },
   "issues": {
