@@ -177,6 +177,12 @@
       },
       "chime_pir_monitor": {
         "name": "Alerta Movimiento Monitor"
+      },
+      "indicator_light": {
+        "name": "Luz Botón Llamada"
+      },
+      "keypad_backlight": {
+        "name": "Retroiluminación Teclado"
       }
     },
     "camera": {
