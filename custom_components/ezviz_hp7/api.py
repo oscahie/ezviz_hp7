@@ -1000,6 +1000,21 @@ class Hp7Api:
                 return [a for a in value if isinstance(a, dict)]
         return None
 
+    def fetch_unlock_log(
+        self, serial: str, categorize: Any = None
+    ) -> list[dict[str, Any]] | None:
+        """The newest unlocks with their pictures (see ``unlock_log``), or None on error."""
+        self.ensure_client()
+        if not self._client:
+            return None
+        from .unlock_log import fetch_unlock_log
+
+        try:
+            return fetch_unlock_log(self._client, serial, categorize)
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.debug("EZVIZ HP7: unlock log read failed: %s", exc)
+            return None
+
     def get_latest_alarm_detail(self, serial: str) -> dict[str, Any] | None:
         """Fetch the most recent detailed alarm record for ``serial``.
 
