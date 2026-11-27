@@ -219,6 +219,7 @@
             "state": {
               "face": "Cara",
               "palm": "Palma",
+              "qr": "Código QR",
               "card": "Tarjeta",
               "code": "Código",
               "app": "App EZVIZ",
@@ -232,6 +233,9 @@
           "message": {
             "name": "Mensaje"
           },
+          "ezviz_name": {
+            "name": "Nombre en EZVIZ"
+          },
           "unlock_time": {
             "name": "Hora de apertura"
           },
@@ -240,6 +244,7 @@
             "state": {
               "face": "Cara",
               "palm": "Palma",
+              "qr": "Código QR",
               "card": "Tarjeta",
               "code": "Código",
               "app": "App EZVIZ",

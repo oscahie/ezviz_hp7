@@ -16,18 +16,19 @@ const TEXT = {
   en: {
     title: "Unlocks", empty: "No unlocks yet", error: "Could not load the unlocks",
     door: "Door", gate: "Gate", unknown: "Unknown",
-    unlock_face: "Face", unlock_palm: "Palm", unlock_rfid: "Card",
+    unlock_face: "Face", unlock_palm: "Palm", unlock_qr: "QR code", unlock_rfid: "Card",
     unlock_code: "Code", unlock_app: "App",
   },
   es: {
     title: "Aperturas", empty: "Aún no hay aperturas", error: "No se pudieron cargar las aperturas",
     door: "Puerta", gate: "Portón", unknown: "Desconocido",
-    unlock_face: "Cara", unlock_palm: "Palma", unlock_rfid: "Tarjeta",
+    unlock_face: "Cara", unlock_palm: "Palma", unlock_qr: "Código QR", unlock_rfid: "Tarjeta",
     unlock_code: "Código", unlock_app: "App",
   },
 };
 const ICONS = {
   unlock_face: "mdi:face-recognition", unlock_palm: "mdi:hand-back-right",
+  unlock_qr: "mdi:qrcode",
   unlock_rfid: "mdi:card-account-details", unlock_code: "mdi:dialpad",
   unlock_app: "mdi:cellphone", other: "mdi:lock-open-variant",
 };
