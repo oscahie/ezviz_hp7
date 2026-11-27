@@ -177,6 +177,12 @@
       },
       "chime_pir_monitor": {
         "name": "Alert dźwiękowy ruchu monitora"
+      },
+      "indicator_light": {
+        "name": "Podświetlenie przycisku wywołania"
+      },
+      "keypad_backlight": {
+        "name": "Podświetlenie klawiatury"
       }
     },
     "camera": {

@@ -30,6 +30,13 @@ async def async_setup_entry(hass, entry, async_add_entities):
     entities.append(EzvizHp7PrivacySwitch(coordinator, api, serial, model))
     entities.append(EzvizHp7DefenceSwitch(coordinator, api, serial, model))
     entities.append(EzvizHp7LabelLightSwitch(coordinator, api, serial, model))
+    # Only on door stations that report them (HP7 Pro), so other models get
+    # no switch that does nothing.
+    status = coordinator.data or {}
+    if "indicator_light_on" in status:
+        entities.append(EzvizHp7IndicatorLightSwitch(coordinator, api, serial, model))
+    if "keypad_backlight_on" in status:
+        entities.append(EzvizHp7KeypadBacklightSwitch(coordinator, api, serial, model))
     entities.append(EzvizHp7ChimePirSwitch(coordinator, api, serial, model=model))
 
     # Per-monitor switches (multi-monitor for HP7 bifamigliare).
@@ -249,6 +256,38 @@ class EzvizHp7LabelLightSwitch(_BaseHp7Switch):
 
     async def async_turn_off(self, **kwargs) -> None:
         await self._async_apply(self._api.set_label_light, False)
+
+
+class EzvizHp7IndicatorLightSwitch(_BaseHp7Switch):
+    """Light at the call button (switch type 3)."""
+
+    def __init__(self, coordinator, api, serial: str, model: str) -> None:
+        super().__init__(
+            coordinator, api, serial, model, "indicator_light", "indicator_light_on"
+        )
+
+    async def async_turn_on(self, **kwargs) -> None:
+        await self._async_apply(self._api.set_indicator_light, True)
+
+    async def async_turn_off(self, **kwargs) -> None:
+        await self._async_apply(self._api.set_indicator_light, False)
+
+
+class EzvizHp7KeypadBacklightSwitch(_BaseHp7Switch):
+    """HP7 Pro keypad backlight (KeypadMgr / LEDPromptParam)."""
+
+    _attr_icon = "mdi:dialpad"
+
+    def __init__(self, coordinator, api, serial: str, model: str) -> None:
+        super().__init__(
+            coordinator, api, serial, model, "keypad_backlight", "keypad_backlight_on"
+        )
+
+    async def async_turn_on(self, **kwargs) -> None:
+        await self._async_apply(self._api.set_keypad_backlight, True)
+
+    async def async_turn_off(self, **kwargs) -> None:
+        await self._async_apply(self._api.set_keypad_backlight, False)
 
 
 class EzvizHp7ChimePirSwitch(_OptimisticStateMixin, CoordinatorEntity, SwitchEntity):
