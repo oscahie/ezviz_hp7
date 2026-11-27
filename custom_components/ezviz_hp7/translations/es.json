@@ -325,7 +325,7 @@
           },
           "monitor_owner": {
             "name": "Cuenta propietaria del monitor",
-            "description": "Solo si esta entrada usa una cuenta EZVIZ COMPARTIDA. EZVIZ deja ver el monitor interior a una cuenta compartida pero le niega sus ajustes, así que los interruptores del monitor quedan en desconocido. Introduce la cuenta propietaria del monitor: se usa solo para leer y cambiar los ajustes de timbre del monitor (timbre sí/no, volumen, tonos). Todo lo demás, push incluido, sigue con la cuenta de esta entrada. Déjalo vacío en otro caso.",
+            "description": "Solo hace falta si esta entrada usa una cuenta con la que se ha compartido el monitor: esa cuenta no puede cambiar los ajustes de timbre del monitor. Pon aquí la cuenta propietaria. Solo se usa para esos ajustes.",
             "data": {
               "monitor_owner_username": "Cuenta propietaria (e-mail o teléfono)",
               "monitor_owner_password": "Contraseña de la cuenta propietaria"

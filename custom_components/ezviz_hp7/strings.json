@@ -325,7 +325,7 @@
           },
           "monitor_owner": {
             "name": "Monitor owner account",
-            "description": "Only if this entry uses a SHARED EZVIZ account. EZVIZ shows a shared account the indoor monitor but refuses it the monitor's settings, so the monitor switches stay unknown. Enter the account that owns the monitor: it is used only to read and change the monitor's ring settings (ring on/off, volume, ringtones). Everything else, push included, stays on this entry's account. Leave empty otherwise.",
+            "description": "Only needed if this entry logs in with an account the monitor is shared with: such an account can't change the monitor's ring settings. Enter the monitor owner's account here. It is used only for those settings.",
             "data": {
               "monitor_owner_username": "Owner account (e-mail or phone)",
               "monitor_owner_password": "Owner account password"
