@@ -197,12 +197,22 @@ action:
 
 | | |
 |---|---|
-| ✅ **How** the door was opened | `category` — `unlock_rfid`, `unlock_face`, `unlock_palm`, `unlock_code`, `unlock_app` |
+| ✅ **How** the door was opened | `category` — `unlock_rfid`, `unlock_face`, `unlock_palm`, `unlock_code`, `unlock_app` (face vs palm: see below) |
 | ✅ **Which credentials are enrolled** | `keys` — the list from the device, with the names you gave them in the app ("Badge 1", "RFID Anna") |
 | ⚠️ **Who** used it | `card_name` is included **only when exactly one credential is enabled**, where it is a safe inference. With two or more enrolled, it is omitted |
 | ❌ Identifying the specific card with several enrolled | Not possible — see below |
 
 EZVIZ simply does not publish the link between an unlock event and the credential that caused it: `cardNo`, `userId`, `recExtraInfo` and `analysisResult` all come back null, and `customerInfo` is just `{"object":"Card"}`. This was confirmed by packet-capturing the official app while opening an event's detail view — **the app itself shows no more than we do** ([#32](https://github.com/Bobsilvio/ezviz_hp7/issues/32)). So with two or more cards, treat RFID as "someone with a valid card", not as identification.
+
+#### Face or palm on the HP7 Pro: the enrolment name is all EZVIZ sends
+
+For a face or palm unlock the HP7 Pro reports only the enrolment name (`customerType`, e.g. `Oscar`). No field of the alarm record, the message list or the push says whether it was the face or the palm, and the EZVIZ app does not show it either. The integration works the method out from the name, in this order:
+
+1. **Method prefix (opt-in).** A name that starts with `[F]` is a face unlock, `[P]` a palm unlock and `[Q]` a QR code unlock. The prefix is taken off for the user: `[F] Oscar` gives method `face` and user `Oscar`. Name the enrolments this way in the EZVIZ app if the same person is enrolled by face and palm. (`[Q]` has not been tested with a real QR unlock yet.)
+2. **Enrolment lists.** Otherwise the name is looked up in the device's face and palm lists. A name found in only one of them gives that method.
+3. If the name is in both lists and has no prefix, the method is `other`: it cannot be told.
+
+The unlock event keeps the name exactly as EZVIZ sent it in the `ezviz_name` attribute, and the `message` attribute is EZVIZ's text unchanged. Only the `user` attribute (and the unlock log card's name) has the `[F]` / `[P]` / `[Q]` prefix removed.
 
 ### Encrypted streams
 

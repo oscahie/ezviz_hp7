@@ -215,6 +215,11 @@
       "chime_pir_ringtone_monitor": {
         "name": "Sonnerie Mouvement Moniteur"
       }
+    },
+    "image": {
+      "last_unlock": {
+        "name": "Dernière Ouverture"
+      }
     }
   },
   "services": {
@@ -364,6 +369,10 @@
           "no_device": "Ce portier n'est plus configuré dans Home Assistant."
         }
       }
+    },
+    "cloud_offline": {
+      "title": "EZVIZ injoignable",
+      "description": "{title} a démarré sans le cloud EZVIZ. Seule la vidéo en direct sur le réseau local (port 8000) fonctionne, avec l'adresse IP et la clé enregistrées la dernière fois que le cloud a répondu. Les événements, l'ouverture, le bouton pour raccrocher et les réglages reviennent d'eux-mêmes : la connexion est retentée toutes les 5 minutes et l'intégration se recharge quand EZVIZ répond."
     }
   },
   "exceptions": {

@@ -119,6 +119,11 @@ class Hp7Api:
         self._switch_logged: set[str] = set()
         # serial -> (local index, resource, KeypadLinkageParam) of the keypad.
         self._keypad: dict[str, tuple[str, str, dict[str, Any]]] = {}
+        # Set when the entry started without the EZVIZ cloud: the LAN IP and
+        # camera key come only from what was stored on disk, and nothing
+        # tries to log in on the way (each attempt would stall a stream
+        # start until the cloud request times out).
+        self.offline = False
         # Optional second client logged in with the EZVIZ account that OWNS
         # the indoor monitor(s). A shared account sees the monitor in its
         # device list, but the cloud refuses it the monitor's settings
@@ -145,6 +150,24 @@ class Hp7Api:
         if self._owner is not None and serial in self._owner_serials:
             return self._owner
         return self
+
+    def seed_local(self, serial: str, ip: str | None, camera_key: str | None) -> None:
+        """Preload the LAN IP and camera key remembered from an earlier run."""
+        bare = self._bare_serial(serial)
+        if ip:
+            self._lan_ip_cache[bare] = str(ip)
+        if camera_key:
+            self._cam_key_cache[bare] = str(camera_key)
+
+    def remembered_local(self, serial: str) -> dict[str, str]:
+        """What the port-8000 stream needs without the cloud, as known now."""
+        bare = self._bare_serial(serial)
+        out: dict[str, str] = {}
+        if self._lan_ip_cache.get(bare):
+            out["ip"] = self._lan_ip_cache[bare]
+        if self._cam_key_cache.get(bare):
+            out["camera_key"] = self._cam_key_cache[bare]
+        return out
 
 
     @property
@@ -528,6 +551,8 @@ class Hp7Api:
         source doesn't depend on the cloud being healthy on every open.
         """
         bare = self._bare_serial(serial)
+        if self.offline:
+            return self._lan_ip_cache.get(bare)
         try:
             self.ensure_client()
             if not self._client:
@@ -1118,6 +1143,21 @@ class Hp7Api:
                 return [a for a in value if isinstance(a, dict)]
         return None
 
+    def fetch_unlock_log(
+        self, serial: str, categorize: Any = None
+    ) -> list[dict[str, Any]] | None:
+        """The newest unlocks with their pictures (see ``unlock_log``), or None on error."""
+        self.ensure_client()
+        if not self._client:
+            return None
+        from .unlock_log import fetch_unlock_log
+
+        try:
+            return fetch_unlock_log(self._client, serial, categorize)
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.debug("EZVIZ HP7: unlock log read failed: %s", exc)
+            return None
+
     def get_latest_alarm_detail(self, serial: str) -> dict[str, Any] | None:
         """Fetch the most recent detailed alarm record for ``serial``.
 
@@ -1188,6 +1228,8 @@ class Hp7Api:
         cached = self._cam_key_cache.get(bare)
         if cached is not None:
             return cached
+        if self.offline:
+            return None
         self.ensure_client()
         if not self._client:
             return None

@@ -37,14 +37,16 @@ async def async_setup_entry(
         async_add_entities: Callback to add entities.
     """
     data: dict[str, Any] = hass.data[DOMAIN][entry.entry_id]
-    coordinator: Hp7Coordinator = data["coordinator"]
+    coordinator: Hp7Coordinator | None = data.get("coordinator")
     serial: str = data["serial"]
     model: str = data.get("model") or "HP7"
 
 
-    async_add_entities(
-        [Hp7LastSnapshotCamera(hass, coordinator, serial, model, entry)]
-    )
+    # Started without the EZVIZ cloud: only the live cameras work.
+    if coordinator is not None:
+        async_add_entities(
+            [Hp7LastSnapshotCamera(hass, coordinator, serial, model, entry)]
+        )
 
     # Live H.264 stream via the VTM cloud relay (Renier pylocalapi).
     # Best-effort: failures here are logged but do not prevent the rest of
