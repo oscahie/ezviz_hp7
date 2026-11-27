@@ -209,6 +209,11 @@
       "chime_pir_ringtone_monitor": {
         "name": "Sonnerie Mouvement Moniteur"
       }
+    },
+    "image": {
+      "last_unlock": {
+        "name": "Dernière Ouverture"
+      }
     }
   },
   "services": {

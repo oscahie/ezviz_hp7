@@ -209,6 +209,11 @@
       "chime_pir_ringtone_monitor": {
         "name": "Melodia ruchu monitora"
       }
+    },
+    "image": {
+      "last_unlock": {
+        "name": "Ostatnie otwarcie"
+      }
     }
   },
   "services": {
