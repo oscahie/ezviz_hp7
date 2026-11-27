@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import time
 from datetime import timedelta
 from typing import Any, TYPE_CHECKING
 
@@ -15,6 +16,9 @@ from .const import UPDATE_INTERVAL_SEC
 
 # alarmType of a door-lock unlock record in the EZVIZ alarm list.
 ALARM_TYPE_UNLOCK_LOCK = 10242
+# Lock (10242) and gate (10243) openings, both kept in the unlock log.
+UNLOCK_LOG_TYPES = (10242, 10243)
+UNLOCK_LOG_MAX_AGE = 1800.0
 
 
 # customerType of the non-biometric unlock methods seen on HP7 / HP7 Pro.
@@ -123,6 +127,11 @@ class Hp7Coordinator(DataUpdateCoordinator):
         self._key_list: list[dict[str, Any]] | None = None
         self._key_list_age: int = 10**6  # force first fetch
         self._biometric_names: dict[str, list[str]] | None = None
+        # Unlock log (message list): rows, the newest unlock alarm it has
+        # seen, and when it was read (monotonic).
+        self._unlock_log: list[dict[str, Any]] | None = None
+        self._unlock_log_marker: Any = None
+        self._unlock_log_read: float = 0.0
         self._last_unlock: dict[str, Any] | None = None
         # Relay handle, set by the camera platform once it exists. Used to
         # back polling off while someone is watching the LAN stream (#44).
@@ -226,6 +235,17 @@ class Hp7Coordinator(DataUpdateCoordinator):
                     self._last_unlock,
                 )
             self._last_alarm_time = alarm_time
+            if recent:
+                newest_unlock = next(
+                    (
+                        a.get("alarmStartTime") for a in recent
+                        if a.get("alarmType") in UNLOCK_LOG_TYPES
+                    ),
+                    None,
+                )
+                if newest_unlock is not None and newest_unlock != self._unlock_log_marker:
+                    self._unlock_log_marker = newest_unlock
+                    self._unlock_log_read = 0.0  # read the log again now
         if self._last_alarm_detail is not None:
             data["latest_alarm_detail"] = self._last_alarm_detail
 
@@ -247,6 +267,10 @@ class Hp7Coordinator(DataUpdateCoordinator):
         if self._key_list is not None:
             data["keys"] = self._key_list
 
+        # After the key list: the log names face/palm from the enrolments.
+        await self._async_refresh_unlock_log()
+        if self._unlock_log is not None:
+            data["unlock_log"] = self._unlock_log
         if self._last_unlock is not None:
             category = unlock_category_from_detail(
                 self._last_unlock, self._biometric_names
@@ -270,3 +294,29 @@ class Hp7Coordinator(DataUpdateCoordinator):
             }
 
         return data
+
+    async def _async_refresh_unlock_log(self) -> None:
+        """Read the unlock log at start, after a new unlock, and twice an hour.
+
+        A gate opening (10243) or an unlock hidden between two polls is
+        caught by the half-hourly read at the latest.
+        """
+        if (
+            self._unlock_log is not None
+            and self._unlock_log_read
+            and time.monotonic() - self._unlock_log_read < UNLOCK_LOG_MAX_AGE
+        ):
+            return
+        self._unlock_log_read = time.monotonic()
+        names = self._biometric_names
+
+        def _categorize(who: str) -> str | None:
+            return unlock_category_from_detail(
+                {"alarmType": ALARM_TYPE_UNLOCK_LOCK, "customerType": who}, names
+            )
+
+        log = await self.hass.async_add_executor_job(
+            self.api.fetch_unlock_log, self.serial, _categorize
+        )
+        if log is not None:
+            self._unlock_log = log
