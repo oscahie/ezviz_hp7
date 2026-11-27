@@ -26,6 +26,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import CONF_ENCRYPTION_KEY, CONF_VERIFICATION_CODE, DOMAIN
+from .coordinator import unlock_user
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -101,8 +102,9 @@ def entry_from_message(
         "who": who,
         "category": category,
         # Same rule as the unlock event: customerType is the enrolment name
-        # for face and palm, and the fixed method name otherwise.
-        "user": who if category in ("unlock_face", "unlock_palm") else None,
+        # for face and palm (less a "[F]"/"[P]" method prefix), and the
+        # fixed method name otherwise.
+        "user": unlock_user(who, category),
         "title": message.get("title"),
         # Kept server-side only: the card gets a signed link instead.
         "pic": message.get("pic") or None,

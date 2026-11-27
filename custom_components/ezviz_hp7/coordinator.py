@@ -21,6 +21,20 @@ UNLOCK_LOG_TYPES = (10242, 10243)
 UNLOCK_LOG_MAX_AGE = 1800.0
 
 
+# Categories whose customerType is an enrolment name, not a method name.
+BIOMETRIC_CATEGORIES = ("unlock_face", "unlock_palm", "unlock_qr")
+
+# Opt-in naming convention (README): an enrolment name that starts with one
+# of these prefixes ("[F] Oscar") names its method. EZVIZ reports face and
+# palm unlocks only by the enrolment name, so this is the way to tell them
+# apart when a person is enrolled by face and palm under the same name.
+# "[Q]" (QR code) is untested: no QR unlock record has been seen yet.
+METHOD_PREFIXES = {
+    "[F]": "unlock_face",
+    "[P]": "unlock_palm",
+    "[Q]": "unlock_qr",
+}
+
 # customerType of the non-biometric unlock methods seen on HP7 / HP7 Pro.
 UNLOCK_CATEGORY_BY_CUSTOMER = {
     "Card": "unlock_rfid",
@@ -29,27 +43,59 @@ UNLOCK_CATEGORY_BY_CUSTOMER = {
 }
 
 
-def unlock_category_from_detail(
-    detail: dict[str, Any] | None, biometric_names: dict[str, list[str]] | None
+def split_method_prefix(name: str) -> tuple[str | None, str]:
+    """(category, name without the prefix) for "[F] Oscar"; (None, name) otherwise."""
+    for prefix, category in METHOD_PREFIXES.items():
+        if name.startswith(prefix):
+            rest = name[len(prefix):].strip()
+            if rest:
+                return category, rest
+    return None, name
+
+
+def unlock_category_from_name(
+    who: str | None, biometric_names: dict[str, list[str]] | None
 ) -> str | None:
-    """Unlock category ("unlock_face", "unlock_palm", ...) from an alarm record.
+    """Unlock category ("unlock_face", "unlock_palm", ...) from a customerType.
 
     The HP7 Pro puts the enrolment name in ``customerType`` for face and palm
-    unlocks ("Oscar unlock the lock"), so the alarm-name strings never say
-    "face" or "palm". Match the name against the device's FaceInfo/VeinInfo
-    lists; it is only trusted when exactly one list contains it. Card, app and code
-    unlocks carry a fixed ``customerType`` ("Card", "EZVIZ app", "Passcode").
+    unlocks ("Oscar unlock the lock"); no field of the alarm record, message
+    list or push says "face" or "palm". In order:
+      1. a "[F]" / "[P]" name prefix (METHOD_PREFIXES) names the method;
+      2. a name in exactly one of the device's FaceInfo/VeinInfo lists
+         (a name in both lists gives no category: it cannot be told);
+      3. card, app and code unlocks carry a fixed ``customerType``
+         ("Card", "EZVIZ app", "Passcode").
     """
-    if not isinstance(detail, dict) or detail.get("alarmType") != ALARM_TYPE_UNLOCK_LOCK:
-        return None
-    who = detail.get("customerType")
     if not isinstance(who, str) or not who:
         return None
+    category, _ = split_method_prefix(who)
+    if category:
+        return category
     if biometric_names:
         hits = [cat for cat, names in biometric_names.items() if who in names]
         if len(hits) == 1:
             return hits[0]
     return UNLOCK_CATEGORY_BY_CUSTOMER.get(who)
+
+
+def unlock_category_from_detail(
+    detail: dict[str, Any] | None, biometric_names: dict[str, list[str]] | None
+) -> str | None:
+    """Unlock category of a lock-unlock alarm record (see unlock_category_from_name)."""
+    if not isinstance(detail, dict) or detail.get("alarmType") != ALARM_TYPE_UNLOCK_LOCK:
+        return None
+    return unlock_category_from_name(detail.get("customerType"), biometric_names)
+
+
+def unlock_user(who: str | None, category: str | None) -> str | None:
+    """Who unlocked: the enrolment name for face/palm/QR, less a method prefix.
+
+    Other methods name the method, not a person, so they give None.
+    """
+    if not who or category not in BIOMETRIC_CATEGORIES:
+        return None
+    return split_method_prefix(who)[1]
 
 
 if TYPE_CHECKING:
@@ -279,12 +325,12 @@ class Hp7Coordinator(DataUpdateCoordinator):
                 "time": self._last_unlock.get("alarmStartTime"),
                 "category": category,
                 # Face/palm records name the enrolment ("Oscar",
-                # "Right Palm Vein Oscar"); other methods name the method.
-                "user": (
-                    self._last_unlock.get("customerType")
-                    if category in ("unlock_face", "unlock_palm")
-                    else None
+                # "[F] Oscar"); other methods name the method.
+                "user": unlock_user(
+                    self._last_unlock.get("customerType"), category
                 ),
+                # customerType exactly as EZVIZ sent it.
+                "name": self._last_unlock.get("customerType"),
                 # Palm records leave the template unfilled:
                 # "{object} unlock the lock".
                 "message": str(self._last_unlock.get("alarmMessage") or "").replace(
