@@ -19,6 +19,7 @@ _LOGGER = logging.getLogger(__name__)
 EVENT_TYPE_BY_CATEGORY = {
     "unlock_face": "face",
     "unlock_palm": "palm",
+    "unlock_qr": "qr",
     "unlock_rfid": "card",
     "unlock_code": "code",
     "unlock_app": "app",
@@ -28,6 +29,7 @@ EVENT_TYPES = [*EVENT_TYPE_BY_CATEGORY.values(), "monitor", "other"]
 EVENT_LABELS = {
     "face": "Face",
     "palm": "Palm",
+    "qr": "QR code",
     "card": "Card",
     "code": "Passcode",
     "app": "EZVIZ app",
@@ -62,7 +64,7 @@ def unlock_event_type(unlock: dict[str, Any]) -> str:
 class Hp7UnlockEvent(CoordinatorEntity, EventEntity):
     """Fires once per lock-unlock record, so the history lists every unlock.
 
-    Event type is the method (face, palm, card, code, app, monitor, other),
+    Event type is the method (face, palm, qr, card, code, app, monitor, other),
     or "<Method> - <user>" (e.g. "Palm - Oscar") when a face/palm unlock
     names its enrolment, so the entity's state shows who opened the door.
     Such types are added to ``event_types`` as they first appear; the
@@ -111,6 +113,9 @@ class Hp7UnlockEvent(CoordinatorEntity, EventEntity):
                 "method": method,
                 "user": user,
                 "message": unlock.get("message"),
+                # customerType as EZVIZ sent it ("[F] Oscar"), before the
+                # method prefix is taken off for ``user``.
+                "ezviz_name": unlock.get("name"),
                 "unlock_time": when,
             },
         )

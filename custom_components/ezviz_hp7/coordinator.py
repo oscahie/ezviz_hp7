@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import time
 from datetime import timedelta
 from typing import Any, TYPE_CHECKING
 
@@ -15,7 +16,24 @@ from .const import UPDATE_INTERVAL_SEC
 
 # alarmType of a door-lock unlock record in the EZVIZ alarm list.
 ALARM_TYPE_UNLOCK_LOCK = 10242
+# Lock (10242) and gate (10243) openings, both kept in the unlock log.
+UNLOCK_LOG_TYPES = (10242, 10243)
+UNLOCK_LOG_MAX_AGE = 1800.0
 
+
+# Categories whose customerType is an enrolment name, not a method name.
+BIOMETRIC_CATEGORIES = ("unlock_face", "unlock_palm", "unlock_qr")
+
+# Opt-in naming convention (README): an enrolment name that starts with one
+# of these prefixes ("[F] Oscar") names its method. EZVIZ reports face and
+# palm unlocks only by the enrolment name, so this is the way to tell them
+# apart when a person is enrolled by face and palm under the same name.
+# "[Q]" (QR code) is untested: no QR unlock record has been seen yet.
+METHOD_PREFIXES = {
+    "[F]": "unlock_face",
+    "[P]": "unlock_palm",
+    "[Q]": "unlock_qr",
+}
 
 # customerType of the non-biometric unlock methods seen on HP7 / HP7 Pro.
 UNLOCK_CATEGORY_BY_CUSTOMER = {
@@ -25,27 +43,59 @@ UNLOCK_CATEGORY_BY_CUSTOMER = {
 }
 
 
-def unlock_category_from_detail(
-    detail: dict[str, Any] | None, biometric_names: dict[str, list[str]] | None
+def split_method_prefix(name: str) -> tuple[str | None, str]:
+    """(category, name without the prefix) for "[F] Oscar"; (None, name) otherwise."""
+    for prefix, category in METHOD_PREFIXES.items():
+        if name.startswith(prefix):
+            rest = name[len(prefix):].strip()
+            if rest:
+                return category, rest
+    return None, name
+
+
+def unlock_category_from_name(
+    who: str | None, biometric_names: dict[str, list[str]] | None
 ) -> str | None:
-    """Unlock category ("unlock_face", "unlock_palm", ...) from an alarm record.
+    """Unlock category ("unlock_face", "unlock_palm", ...) from a customerType.
 
     The HP7 Pro puts the enrolment name in ``customerType`` for face and palm
-    unlocks ("Oscar unlock the lock"), so the alarm-name strings never say
-    "face" or "palm". Match the name against the device's FaceInfo/VeinInfo
-    lists; it is only trusted when exactly one list contains it. Card, app and code
-    unlocks carry a fixed ``customerType`` ("Card", "EZVIZ app", "Passcode").
+    unlocks ("Oscar unlock the lock"); no field of the alarm record, message
+    list or push says "face" or "palm". In order:
+      1. a "[F]" / "[P]" name prefix (METHOD_PREFIXES) names the method;
+      2. a name in exactly one of the device's FaceInfo/VeinInfo lists
+         (a name in both lists gives no category: it cannot be told);
+      3. card, app and code unlocks carry a fixed ``customerType``
+         ("Card", "EZVIZ app", "Passcode").
     """
-    if not isinstance(detail, dict) or detail.get("alarmType") != ALARM_TYPE_UNLOCK_LOCK:
-        return None
-    who = detail.get("customerType")
     if not isinstance(who, str) or not who:
         return None
+    category, _ = split_method_prefix(who)
+    if category:
+        return category
     if biometric_names:
         hits = [cat for cat, names in biometric_names.items() if who in names]
         if len(hits) == 1:
             return hits[0]
     return UNLOCK_CATEGORY_BY_CUSTOMER.get(who)
+
+
+def unlock_category_from_detail(
+    detail: dict[str, Any] | None, biometric_names: dict[str, list[str]] | None
+) -> str | None:
+    """Unlock category of a lock-unlock alarm record (see unlock_category_from_name)."""
+    if not isinstance(detail, dict) or detail.get("alarmType") != ALARM_TYPE_UNLOCK_LOCK:
+        return None
+    return unlock_category_from_name(detail.get("customerType"), biometric_names)
+
+
+def unlock_user(who: str | None, category: str | None) -> str | None:
+    """Who unlocked: the enrolment name for face/palm/QR, less a method prefix.
+
+    Other methods name the method, not a person, so they give None.
+    """
+    if not who or category not in BIOMETRIC_CATEGORIES:
+        return None
+    return split_method_prefix(who)[1]
 
 
 if TYPE_CHECKING:
@@ -123,6 +173,11 @@ class Hp7Coordinator(DataUpdateCoordinator):
         self._key_list: list[dict[str, Any]] | None = None
         self._key_list_age: int = 10**6  # force first fetch
         self._biometric_names: dict[str, list[str]] | None = None
+        # Unlock log (message list): rows, the newest unlock alarm it has
+        # seen, and when it was read (monotonic).
+        self._unlock_log: list[dict[str, Any]] | None = None
+        self._unlock_log_marker: Any = None
+        self._unlock_log_read: float = 0.0
         self._last_unlock: dict[str, Any] | None = None
         # Relay handle, set by the camera platform once it exists. Used to
         # back polling off while someone is watching the LAN stream (#44).
@@ -226,6 +281,17 @@ class Hp7Coordinator(DataUpdateCoordinator):
                     self._last_unlock,
                 )
             self._last_alarm_time = alarm_time
+            if recent:
+                newest_unlock = next(
+                    (
+                        a.get("alarmStartTime") for a in recent
+                        if a.get("alarmType") in UNLOCK_LOG_TYPES
+                    ),
+                    None,
+                )
+                if newest_unlock is not None and newest_unlock != self._unlock_log_marker:
+                    self._unlock_log_marker = newest_unlock
+                    self._unlock_log_read = 0.0  # read the log again now
         if self._last_alarm_detail is not None:
             data["latest_alarm_detail"] = self._last_alarm_detail
 
@@ -247,6 +313,10 @@ class Hp7Coordinator(DataUpdateCoordinator):
         if self._key_list is not None:
             data["keys"] = self._key_list
 
+        # After the key list: the log names face/palm from the enrolments.
+        await self._async_refresh_unlock_log()
+        if self._unlock_log is not None:
+            data["unlock_log"] = self._unlock_log
         if self._last_unlock is not None:
             category = unlock_category_from_detail(
                 self._last_unlock, self._biometric_names
@@ -255,12 +325,12 @@ class Hp7Coordinator(DataUpdateCoordinator):
                 "time": self._last_unlock.get("alarmStartTime"),
                 "category": category,
                 # Face/palm records name the enrolment ("Oscar",
-                # "Right Palm Vein Oscar"); other methods name the method.
-                "user": (
-                    self._last_unlock.get("customerType")
-                    if category in ("unlock_face", "unlock_palm")
-                    else None
+                # "[F] Oscar"); other methods name the method.
+                "user": unlock_user(
+                    self._last_unlock.get("customerType"), category
                 ),
+                # customerType exactly as EZVIZ sent it.
+                "name": self._last_unlock.get("customerType"),
                 # Palm records leave the template unfilled:
                 # "{object} unlock the lock".
                 "message": str(self._last_unlock.get("alarmMessage") or "").replace(
@@ -270,3 +340,29 @@ class Hp7Coordinator(DataUpdateCoordinator):
             }
 
         return data
+
+    async def _async_refresh_unlock_log(self) -> None:
+        """Read the unlock log at start, after a new unlock, and twice an hour.
+
+        A gate opening (10243) or an unlock hidden between two polls is
+        caught by the half-hourly read at the latest.
+        """
+        if (
+            self._unlock_log is not None
+            and self._unlock_log_read
+            and time.monotonic() - self._unlock_log_read < UNLOCK_LOG_MAX_AGE
+        ):
+            return
+        self._unlock_log_read = time.monotonic()
+        names = self._biometric_names
+
+        def _categorize(who: str) -> str | None:
+            return unlock_category_from_detail(
+                {"alarmType": ALARM_TYPE_UNLOCK_LOCK, "customerType": who}, names
+            )
+
+        log = await self.hass.async_add_executor_job(
+            self.api.fetch_unlock_log, self.serial, _categorize
+        )
+        if log is not None:
+            self._unlock_log = log

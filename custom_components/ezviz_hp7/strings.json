@@ -225,6 +225,7 @@
             "state": {
               "face": "Face",
               "palm": "Palm",
+              "qr": "QR code",
               "card": "Card",
               "code": "Passcode",
               "app": "EZVIZ app",
@@ -238,6 +239,9 @@
           "message": {
             "name": "Message"
           },
+          "ezviz_name": {
+            "name": "EZVIZ name"
+          },
           "unlock_time": {
             "name": "Unlock time"
           },
@@ -246,6 +250,7 @@
             "state": {
               "face": "Face",
               "palm": "Palm",
+              "qr": "QR code",
               "card": "Card",
               "code": "Passcode",
               "app": "EZVIZ app",

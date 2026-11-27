@@ -254,6 +254,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_create_background_task(hass, push.async_start(), "ezviz_hp7_push")
 
     _async_register_services(hass)
+    from .unlock_log import async_setup_unlock_log
+
+    await async_setup_unlock_log(hass)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     

@@ -1,14 +1,19 @@
 {
   "domain": "ezviz_hp7",
   "name": "EZVIZ HP7 / CP7",
+  "after_dependencies": [
+    "frontend"
+  ],
   "codeowners": [
     "@Bobsilvio"
   ],
   "config_flow": true,
   "dependencies": [
     "ffmpeg",
+    "http",
+    "repairs",
     "stream",
-    "repairs"
+    "websocket_api"
   ],
   "documentation": "https://github.com/Bobsilvio/ezviz_hp7/",
   "iot_class": "cloud_polling",
