@@ -255,6 +255,11 @@
           }
         }
       }
+    },
+    "image": {
+      "last_unlock": {
+        "name": "Última Apertura"
+      }
     }
   },
   "services": {
