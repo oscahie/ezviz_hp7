@@ -2,12 +2,16 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.storage import Store
 
 from .const import (
     DOMAIN,
@@ -23,6 +27,7 @@ from .const import (
     CONF_STREAM_SOURCE,
     STREAM_SOURCE_CLOUD,
     STREAM_SOURCES,
+    STREAM_SOURCE_LOCAL_SDK,
     CONF_STREAM_MODE,
     STREAM_MODE_AUTO,
     STREAM_MODES,
@@ -39,6 +44,18 @@ from .push import Hp7PushListener
 from .device_info import DEFAULT_MODEL, detect_model
 
 _LOGGER = logging.getLogger(__name__)
+
+# Started without the EZVIZ cloud: how often the login is tried again.
+CLOUD_RETRY_INTERVAL = timedelta(minutes=5)
+CLOUD_OFFLINE_ISSUE = "cloud_offline_"
+# Only the live cameras run without the cloud.
+OFFLINE_PLATFORMS = ["camera"]
+
+
+def _local_store(hass: HomeAssistant, entry: ConfigEntry) -> Store:
+    """What the port-8000 live video needs without the cloud: LAN IP, camera
+    key and model, kept in ``.storage`` like the EZVIZ login itself."""
+    return Store(hass, 1, f"{DOMAIN}.local.{entry.entry_id}")
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -156,11 +173,36 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
     )
 
+    store = _local_store(hass, entry)
     try:
         api = Hp7Api(username, password, region, token=token)
         await hass.async_add_executor_job(api.login)
         await hass.async_add_executor_job(api.detect_capabilities, serial)
     except Exception as exc:
+        stored = await store.async_load() or {}
+        if (
+            stream_source == STREAM_SOURCE_LOCAL_SDK
+            and verification_code
+            and stored.get("ip")
+        ):
+            return await _async_setup_offline(
+                hass, entry, store, stored, exc,
+                Hp7Api(username, password, region, token=token),
+                {
+                    "serial": serial,
+                    "monitor_serial": monitor_serial,
+                    "relay_port": relay_port,
+                    "relay_bind": relay_bind,
+                    "aggressive_mpegts": aggressive_mpegts,
+                    "video_codec": video_codec,
+                    "stream_source": stream_source,
+                    "stream_mode": stream_mode,
+                    "stream_quality": stream_quality,
+                    "diagnostic_dumps": diagnostic_dumps,
+                    "encryption_key": encryption_key,
+                    "verification_code": verification_code,
+                },
+            )
         # Deliberately not logged at ERROR: raising ConfigEntryNotReady is
         # how a *retryable* setup failure is reported, and Home Assistant
         # already logs it once and then retries with backoff. Logging it
@@ -216,7 +258,115 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+
+    # The cloud answers: forget an earlier "started without the cloud"
+    # notice, and remember what a start without it would need.
+    ir.async_delete_issue(hass, DOMAIN, f"{CLOUD_OFFLINE_ISSUE}{entry.entry_id}")
+    if stream_source == STREAM_SOURCE_LOCAL_SDK:
+        entry.async_create_background_task(
+            hass,
+            _async_remember_local(hass, store, api, serial, model, resolve_ip=True),
+            "ezviz_hp7_remember_local",
+        )
     
+    return True
+
+
+async def _async_remember_local(
+    hass: HomeAssistant,
+    store: Store,
+    api: Hp7Api,
+    serial: str,
+    model: str,
+    resolve_ip: bool = False,
+) -> None:
+    """Store the LAN IP, camera key and model when they changed."""
+    try:
+        if resolve_ip:
+            await hass.async_add_executor_job(api.get_local_ip, serial)
+        local = api.remembered_local(serial)
+        if not local.get("ip"):
+            return
+        old = await store.async_load() or {}
+        new = {**old, **local, "model": model}
+        if new != old:
+            await store.async_save(new)
+            _LOGGER.debug("EZVIZ HP7: stored the local stream data for %s", serial)
+    except Exception as exc:  # noqa: BLE001
+        _LOGGER.debug("EZVIZ HP7: could not store the local stream data: %s", exc)
+
+
+async def _async_setup_offline(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    store: Store,
+    stored: dict[str, Any],
+    error: Exception,
+    api: Hp7Api,
+    settings: dict[str, Any],
+) -> bool:
+    """Start with only the live cameras when EZVIZ cannot be reached.
+
+    The port-8000 stream needs the LAN IP and the verification code, both
+    known without the cloud once the entry has run with it. Everything else
+    (events, unlocking, settings) needs the cloud: the login is tried again
+    every few minutes and the entry reloads when it works.
+    """
+    serial = settings["serial"]
+    model = str(stored.get("model") or DEFAULT_MODEL)
+    api.offline = True
+    api.seed_local(serial, stored.get("ip"), stored.get("camera_key"))
+    _LOGGER.warning(
+        "EZVIZ cannot be reached (%s). Starting %s with the local live video "
+        "only; events, unlocking and settings come back when EZVIZ answers",
+        error, serial,
+    )
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+        **settings,
+        "api": api,
+        "model": model,
+        "coordinator": None,
+        "offline": True,
+        "platforms": OFFLINE_PLATFORMS,
+    }
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        f"{CLOUD_OFFLINE_ISSUE}{entry.entry_id}",
+        is_fixable=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key="cloud_offline",
+        translation_placeholders={"title": entry.title},
+    )
+    _async_register_services(hass)
+    await hass.config_entries.async_forward_entry_setups(entry, OFFLINE_PLATFORMS)
+    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+
+    retrying = False
+
+    async def _retry_cloud(_now: Any) -> None:
+        nonlocal retrying
+        if retrying:
+            return
+        retrying = True
+        try:
+            probe = Hp7Api(
+                entry.data["username"], entry.data["password"],
+                entry.data["region"], token=entry.data.get("token"),
+            )
+            await hass.async_add_executor_job(probe.login)
+            await hass.async_add_executor_job(probe.close)
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.debug("EZVIZ still not reachable: %s", exc)
+            return
+        finally:
+            retrying = False
+        _LOGGER.info("EZVIZ answers again; reloading %s", serial)
+        hass.config_entries.async_schedule_reload(entry.entry_id)
+
+    entry.async_on_unload(
+        async_track_time_interval(hass, _retry_cloud, CLOUD_RETRY_INTERVAL)
+    )
     return True
 
 
@@ -343,7 +493,21 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except Exception as exc:  # noqa: BLE001
         _LOGGER.debug("Live camera teardown ignored: %s", exc)
 
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    entry_data = hass.data.get(DOMAIN, {}).get(entry.entry_id) or {}
+    platforms = entry_data.get("platforms", PLATFORMS)
+    # The camera key is often fetched only when the stream first opens, after
+    # setup has stored what it knew: store it now for a start without cloud.
+    if (
+        not entry_data.get("offline")
+        and entry_data.get("stream_source") == STREAM_SOURCE_LOCAL_SDK
+        and entry_data.get("api") is not None
+    ):
+        await _async_remember_local(
+            hass, _local_store(hass, entry), entry_data["api"],
+            entry_data["serial"], str(entry_data.get("model") or DEFAULT_MODEL),
+        )
+
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, platforms)
 
     if unload_ok:
         data = hass.data.get(DOMAIN, {}).pop(entry.entry_id, {})

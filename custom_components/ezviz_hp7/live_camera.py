@@ -1796,12 +1796,18 @@ class Hp7StreamRelay:
                 return
             self._last_attempt = loop.time()
             try:
-                await loop.run_in_executor(None, self._api.ensure_client)
-                ezviz_client = self._api._client
-                if ezviz_client is None:
-                    raise RuntimeError(
-                        "EzvizClient unavailable after ensure_client()"
-                    )
+                if self._stream_source == "local_sdk":
+                    # Port 8000 needs only the LAN IP and the verification
+                    # code, not a cloud session: the stream must also start
+                    # while the EZVIZ cloud is down.
+                    ezviz_client = None
+                else:
+                    await loop.run_in_executor(None, self._api.ensure_client)
+                    ezviz_client = self._api._client
+                    if ezviz_client is None:
+                        raise RuntimeError(
+                            "EzvizClient unavailable after ensure_client()"
+                        )
                 vtm = await self._open_source(loop, ezviz_client)
                 info = await loop.run_in_executor(None, vtm.start)
             except Exception as exc:
