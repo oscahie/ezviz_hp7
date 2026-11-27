@@ -288,7 +288,7 @@
           "monitor_serial": "Indoor monitor serial number"
         },
         "data_description": {
-          "monitor_serial": "Enter the indoor monitor serial number (or several, separated by commas, for the HP7 two-family setup) to expose a dedicated switch per monitor. Empty = no monitor."
+          "monitor_serial": "Enter the indoor monitor serial number (or several, separated by commas, for the HP7 two-family setup) to expose a dedicated switch per monitor. Empty = no monitor. Once saved, a \"Monitor owner account\" section appears here."
         },
         "sections": {
           "video": {

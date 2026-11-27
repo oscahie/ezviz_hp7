@@ -288,7 +288,7 @@
           "monitor_serial": "Número de serie del monitor interior"
         },
         "data_description": {
-          "monitor_serial": "Introduce el número de serie del monitor interior (o varios separados por comas para HP7 bifamiliar) para exponer un interruptor por cada monitor. Vacío = sin monitor."
+          "monitor_serial": "Introduce el número de serie del monitor interior (o varios separados por comas para HP7 bifamiliar) para exponer un interruptor por cada monitor. Vacío = sin monitor. Al guardarlo aparece aquí la sección \"Cuenta propietaria del monitor\"."
         },
         "sections": {
           "video": {

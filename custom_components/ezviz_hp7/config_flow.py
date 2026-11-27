@@ -594,20 +594,22 @@ class OptionsFlow(config_entries.OptionsFlow):
                 ),
             }
         )
-        schema = vol.Schema(
-            {
-                vol.Optional(CONF_MONITOR_SERIAL, default=current or ""): str,
-                vol.Required(SECTION_MONITOR_OWNER): section(
-                    monitor_owner, {"collapsed": not current_owner_user}
-                ),
-                vol.Required(SECTION_VIDEO): section(
-                    video, {"collapsed": False}
-                ),
-                vol.Required(SECTION_ADVANCED): section(
-                    advanced, {"collapsed": True}
-                ),
-            }
+        fields: dict[Any, Any] = {
+            vol.Optional(CONF_MONITOR_SERIAL, default=current or ""): str,
+        }
+        # The owner account only serves the monitor's settings, so the
+        # section shows up once a monitor serial has been saved.
+        if str(current or "").strip():
+            fields[vol.Required(SECTION_MONITOR_OWNER)] = section(
+                monitor_owner, {"collapsed": not current_owner_user}
+            )
+        fields[vol.Required(SECTION_VIDEO)] = section(
+            video, {"collapsed": False}
         )
+        fields[vol.Required(SECTION_ADVANCED)] = section(
+            advanced, {"collapsed": True}
+        )
+        schema = vol.Schema(fields)
         return self.async_show_form(
             step_id="init", data_schema=schema, errors=errors
         )
