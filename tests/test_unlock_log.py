@@ -34,6 +34,10 @@ def test_entry_from_message():
     row = unlock_log.entry_from_message(_msg(1, 10242, "Oscar (F)"), lambda w: "unlock_face")
     assert row["lock"] == "door" and row["who"] == "Oscar (F)"
     assert row["category"] == "unlock_face" and row["crypt"] and row["id"] == "m1"
+    # Name as the unlock event gives it: the enrolment name, unchanged.
+    assert row["user"] == "Oscar (F)"
+    card = unlock_log.entry_from_message(_msg(4, 10242, "Card"), lambda w: "unlock_rfid")
+    assert card["who"] == "Card" and card["user"] is None
     assert unlock_log.entry_from_message(_msg(2, 10243, "Card"))["lock"] == "gate"
     assert unlock_log.entry_from_message(_msg(3, 10079)) is None
 

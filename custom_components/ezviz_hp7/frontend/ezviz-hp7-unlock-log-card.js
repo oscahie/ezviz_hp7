@@ -117,7 +117,7 @@ class EzvizHp7UnlockLogCard extends HTMLElement {
     } else {
       body = rows.map((row, i) => {
         const method = row.category ? this._t(row.category) : "";
-        const who = String(row.who || "");  // EZVIZ's text, unchanged
+        const who = row.user || "";  // the enrolment name, as the unlock event gives it
         const icon = ICONS[row.category] || ICONS.other;
         const lock = row.lock === "gate" ? this._t("gate") : this._t("door");
         const pic = row.picture
@@ -125,7 +125,7 @@ class EzvizHp7UnlockLogCard extends HTMLElement {
           : `<div class="thumb none"><ha-icon icon="mdi:image-off-outline"></ha-icon></div>`;
         return `<div class="row">${pic}
           <div class="info">
-            <div class="who">${escapeHtml(who || method || this._t("unknown"))}</div>
+            <div class="who">${escapeHtml(who || method || row.who || this._t("unknown"))}</div>
             <div class="sub"><ha-icon icon="${icon}"></ha-icon>${escapeHtml(method)}${method ? " · " : ""}${lock}</div>
           </div>
           <div class="when">${this._when(row)}</div>
