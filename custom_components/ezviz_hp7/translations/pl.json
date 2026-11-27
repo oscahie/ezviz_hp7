@@ -358,6 +358,10 @@
           "no_device": "Ten wideodomofon nie jest już skonfigurowany w Home Assistant."
         }
       }
+    },
+    "cloud_offline": {
+      "title": "Brak połączenia z EZVIZ",
+      "description": "{title} uruchomiono bez chmury EZVIZ. Działa tylko obraz na żywo przez sieć lokalną (port 8000), z adresem IP i kluczem zapisanymi, gdy chmura ostatnio odpowiedziała. Zdarzenia, otwieranie, przycisk rozłączania i ustawienia wrócą same: logowanie jest ponawiane co 5 minut, a integracja przeładuje się, gdy EZVIZ odpowie."
     }
   },
   "exceptions": {
