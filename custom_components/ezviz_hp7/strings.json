@@ -298,7 +298,7 @@
           "monitor_serial": "Indoor monitor serial number"
         },
         "data_description": {
-          "monitor_serial": "Enter the indoor monitor serial number (or several, separated by commas, for the HP7 two-family setup) to expose a dedicated switch per monitor. Empty = no monitor."
+          "monitor_serial": "Enter the indoor monitor serial number (or several, separated by commas, for the HP7 two-family setup) to expose a dedicated switch per monitor. Empty = no monitor. Once saved, a \"Monitor owner account\" section appears here."
         },
         "sections": {
           "video": {
@@ -332,9 +332,22 @@
               "aggressive_mpegts": "Turn on only if the logs show 'Immediate exit requested'.",
               "diagnostic_dumps": "Writes two .bin files in /config with the start of the stream, for reporting a video problem. Leave off in normal use."
             }
+          },
+          "monitor_owner": {
+            "name": "Monitor owner account",
+            "description": "Only needed if this entry logs in with an account the monitor is shared with: such an account can't change the monitor's ring settings. Enter the monitor owner's account here. It is used only for those settings.",
+            "data": {
+              "monitor_owner_username": "Owner account (e-mail or phone)",
+              "monitor_owner_password": "Owner account password"
+            }
           }
         }
       }
+    },
+    "error": {
+      "owner_auth": "Could not log in with the monitor owner account. Check the e-mail and password (same region as this entry).",
+      "owner_mfa": "The monitor owner account asks for a verification code at login, which this option does not support yet.",
+      "owner_password_missing": "Enter the monitor owner account password."
     }
   },
   "issues": {

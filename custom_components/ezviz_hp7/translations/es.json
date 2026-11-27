@@ -298,7 +298,7 @@
           "monitor_serial": "Número de serie del monitor interior"
         },
         "data_description": {
-          "monitor_serial": "Introduce el número de serie del monitor interior (o varios separados por comas para HP7 bifamiliar) para exponer un interruptor por cada monitor. Vacío = sin monitor."
+          "monitor_serial": "Introduce el número de serie del monitor interior (o varios separados por comas para HP7 bifamiliar) para exponer un interruptor por cada monitor. Vacío = sin monitor. Al guardarlo aparece aquí la sección \"Cuenta propietaria del monitor\"."
         },
         "sections": {
           "video": {
@@ -332,9 +332,22 @@
               "aggressive_mpegts": "Actívalo solo si en los logs ves 'Immediate exit requested'.",
               "diagnostic_dumps": "Escribe dos archivos .bin en /config con el inicio del stream, para reportar un problema de vídeo. Déjalo apagado en uso normal."
             }
+          },
+          "monitor_owner": {
+            "name": "Cuenta propietaria del monitor",
+            "description": "Solo hace falta si esta entrada usa una cuenta con la que se ha compartido el monitor: esa cuenta no puede cambiar los ajustes de timbre del monitor. Pon aquí la cuenta propietaria. Solo se usa para esos ajustes.",
+            "data": {
+              "monitor_owner_username": "Cuenta propietaria (e-mail o teléfono)",
+              "monitor_owner_password": "Contraseña de la cuenta propietaria"
+            }
           }
         }
       }
+    },
+    "error": {
+      "owner_auth": "No se pudo iniciar sesión con la cuenta propietaria del monitor. Revisa el e-mail y la contraseña (misma región que esta entrada).",
+      "owner_mfa": "La cuenta propietaria del monitor pide un código de verificación al iniciar sesión, y esta opción aún no lo admite.",
+      "owner_password_missing": "Introduce la contraseña de la cuenta propietaria del monitor."
     }
   },
   "issues": {
