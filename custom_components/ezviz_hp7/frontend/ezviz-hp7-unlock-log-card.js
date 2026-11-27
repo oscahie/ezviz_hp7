@@ -103,14 +103,6 @@ class EzvizHp7UnlockLogCard extends HTMLElement {
     return sameDay ? `${m[4]}:${m[5]}` : `${m[3]}/${m[2]} ${m[4]}:${m[5]}`;
   }
 
-  _who(row) {
-    // "Oscar (F)" -> "Oscar"; "Right Palm Vein Oscar" -> "Oscar".
-    let who = String(row.who || "").replace(/\s*\([A-Z]\)\s*$/, "");
-    who = who.replace(/^(Right|Left) Palm Vein\s+/i, "");
-    if (["Card", "EZVIZ app", "Passcode"].includes(who)) who = "";
-    return who;
-  }
-
   _render() {
     if (!this.shadowRoot) return;
     const title = this._config?.title ?? this._t("title");
@@ -125,7 +117,7 @@ class EzvizHp7UnlockLogCard extends HTMLElement {
     } else {
       body = rows.map((row, i) => {
         const method = row.category ? this._t(row.category) : "";
-        const who = this._who(row);
+        const who = String(row.who || "");  // EZVIZ's text, unchanged
         const icon = ICONS[row.category] || ICONS.other;
         const lock = row.lock === "gate" ? this._t("gate") : this._t("door");
         const pic = row.picture
