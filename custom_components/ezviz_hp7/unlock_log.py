@@ -92,13 +92,17 @@ def entry_from_message(
         when = int(message.get("time"))
     except (TypeError, ValueError):
         when = None
+    category = categorize(who) if categorize and who else None
     return {
         "id": str(msg_id),
         "time": when,  # epoch milliseconds
         "time_str": message.get("timeStr"),
         "lock": kind,
         "who": who,
-        "category": categorize(who) if categorize and who else None,
+        "category": category,
+        # Same rule as the unlock event: customerType is the enrolment name
+        # for face and palm, and the fixed method name otherwise.
+        "user": who if category in ("unlock_face", "unlock_palm") else None,
         "title": message.get("title"),
         # Kept server-side only: the card gets a signed link instead.
         "pic": message.get("pic") or None,
@@ -240,6 +244,7 @@ def ws_unlock_log(hass: HomeAssistant, connection: Any, msg: dict[str, Any]) -> 
                     "time_str": row.get("time_str"),
                     "lock": row.get("lock"),
                     "who": row.get("who"),
+                    "user": row.get("user"),
                     "category": row.get("category"),
                     "title": row.get("title"),
                     "picture": picture,
