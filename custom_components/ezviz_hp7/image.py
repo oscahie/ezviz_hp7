@@ -72,30 +72,65 @@ class Hp7UnlockImage(CoordinatorEntity, ImageEntity):
 
         return make_device_info(self._serial, self._model)
 
+    def _latest(self) -> dict[str, Any] | None:
+        """The newest unlock: the coordinator's alarm record, or the unlock log's
+        first row when that is newer or the only one (on a door station with
+        many detections the alarm list often holds no unlock after a restart,
+        and gate openings are only in the log)."""
+        data = self.coordinator.data or {}
+        candidates: list[dict[str, Any]] = []
+        unlock = data.get("unlock")
+        if isinstance(unlock, dict):
+            record = unlock.get("record") or {}
+            candidates.append(
+                {
+                    "key": ("alarm", unlock.get("time")),
+                    "url": unlock_picture_url(record),
+                    "time_str": record.get("alarmStartTimeStr"),
+                    "user": unlock.get("user"),
+                    "category": unlock.get("category"),
+                }
+            )
+        log = data.get("unlock_log")
+        if isinstance(log, list) and log and isinstance(log[0], dict):
+            row = log[0]
+            candidates.append(
+                {
+                    "key": ("log", row.get("id")),
+                    "url": row.get("pic"),
+                    "time_str": row.get("time_str"),
+                    "user": row.get("who"),
+                    "category": row.get("category"),
+                }
+            )
+        if not candidates:
+            return None
+        # Both times are the door station's local "YYYY-MM-DD HH:MM:SS"; on a
+        # tie the alarm record wins (it carries the matched enrolment name).
+        return max(candidates, key=lambda c: str(c["time_str"] or ""))
+
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        unlock = (self.coordinator.data or {}).get("unlock") or {}
-        record = unlock.get("record") or {}
+        latest = self._latest() or {}
         return {
-            "unlock_time": record.get("alarmStartTimeStr"),
-            "user": unlock.get("user"),
-            "category": unlock.get("category"),
+            "unlock_time": latest.get("time_str"),
+            "user": latest.get("user"),
+            "category": latest.get("category"),
         }
 
     def _update_from_data(self, initial: bool = False) -> bool:
-        unlock = (self.coordinator.data or {}).get("unlock")
-        if not isinstance(unlock, dict):
+        latest = self._latest()
+        if latest is None:
             return False
-        unlock_time = unlock.get("time")
-        url = unlock_picture_url(unlock.get("record"))
-        if unlock_time == self._unlock_time and url == self._url:
+        url = latest["url"]
+        time_str = latest["time_str"]
+        if time_str == self._unlock_time and url == self._url:
             return False
-        self._unlock_time = unlock_time
+        self._unlock_time = time_str
         self._url = url
         self._cached = None
-        record = unlock.get("record") or {}
         # The unlock's own local time, so the state says when the door opened.
-        when = dt_util.parse_datetime(str(record.get("alarmStartTimeStr") or ""))
+        when = dt_util.parse_datetime(str(time_str or ""))
         if when is not None and when.tzinfo is None:
             when = when.replace(tzinfo=dt_util.get_default_time_zone())
         self._attr_image_last_updated = when or (None if initial else dt_util.now())

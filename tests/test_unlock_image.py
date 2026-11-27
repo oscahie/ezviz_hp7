@@ -43,3 +43,18 @@ async def test_updates_only_on_a_new_unlock(hass):
     assert entity._update_from_data()
     assert entity._url == "https://x/2.jpg" and entity._cached is None
     assert entity.extra_state_attributes["user"] == "Oscar"
+
+
+async def test_falls_back_to_the_unlock_log(hass):
+    """No unlock in the alarm list (Pro after a restart): the log's newest row."""
+    coordinator = MagicMock()
+    log = [{"id": "m9", "pic": "https://x/9.jpg", "time_str": "2026-11-27 13:13:37",
+            "who": "Oscar (F)", "category": "unlock_face"}]
+    coordinator.data = {"unlock_log": log}
+    entity = Hp7UnlockImage(hass, coordinator, SERIAL, "HP7 Pro", MagicMock(data={}, options={}))
+    assert entity._url == "https://x/9.jpg"
+    assert entity.extra_state_attributes["category"] == "unlock_face"
+    # A newer gate opening only in the log wins over an older alarm record.
+    coordinator.data = {**_unlock(1, "https://x/1.jpg"), "unlock_log": log}
+    entity._update_from_data()
+    assert entity._url == "https://x/9.jpg"
