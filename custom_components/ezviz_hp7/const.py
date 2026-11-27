@@ -115,7 +115,7 @@ CONF_ENCRYPTION_KEY = "encryption_key"
 CONF_VERIFICATION_CODE = "verification_code"
 
 # Platforms to set up
-PLATFORMS = ["button", "sensor", "binary_sensor", "camera", "switch", "number", "event"]
+PLATFORMS = ["button", "sensor", "binary_sensor", "camera", "switch", "number", "event", "image"]
 
 # Poll interval in seconds. 2 s was aggressive enough to trigger HTTP 500 from
 # the EZVIZ pagelist endpoint under load (see issue #25); 15 s matches Pedro's
