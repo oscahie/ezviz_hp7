@@ -26,6 +26,17 @@ DEFAULT_GATE_LOCK_NO = 1
 # How long a fetched ChimeMusic blob stays valid. Must be > the coordinator
 # poll interval so consecutive ticks reuse it (#44).
 CHIME_CACHE_TTL = 60.0
+# After this many failed ChimeMusic reads in a row, stop asking every poll
+# and back off: CHIME_RETRY_BACKOFF, doubling on each further failure up to
+# CHIME_RETRY_BACKOFF_MAX. It never gives up.
+CHIME_FAIL_LIMIT = 3
+CHIME_RETRY_BACKOFF = 120.0
+CHIME_RETRY_BACKOFF_MAX = 1800.0
+# Failing this long without one good read -> a Repairs notice.
+CHIME_ISSUE_AFTER = 3600.0
+# On a failed read, keep showing the last good ChimeMusic for up to this long
+# rather than flipping the entities to unknown on a single cloud hiccup.
+CHIME_STALE_MAX = 900.0
 # Spacing between token re-login attempts once the client has lost its token,
 # so a sustained cloud outage doesn't turn into a login on every 15 s poll —
 # the rate-limit risk the coordinator's single-shot force_relogin avoids.
@@ -97,6 +108,12 @@ class Hp7Api:
         # serial -> consecutive ChimeMusic failures (cache as dead after N
         # even when the error message is empty).
         self._chime_fail_counts: dict[str, int] = {}
+        # serial -> monotonic time before which ChimeMusic isn't re-read
+        # (set after CHIME_FAIL_LIMIT failures in a row).
+        self._chime_retry_after: dict[str, float] = {}
+        # serial -> (monotonic time of the first failure of the current
+        # streak, last error text). Cleared by a good read.
+        self._chime_failing: dict[str, tuple[float, str]] = {}
         # Serials for which EZVIZ told us "device does not exist". We
         # cache them in-memory for the session so we stop hammering the
         # ChimeMusic endpoint on every 30s coordinator tick (#33 — old
@@ -143,6 +160,8 @@ class Hp7Api:
         for s in self._owner_serials:
             self._chime_dead_serials.discard(s)
             self._chime_fail_counts.pop(s, None)
+            self._chime_retry_after.pop(s, None)
+            self._chime_failing.pop(s, None)
             self._chime_config_cache.pop(s, None)
 
     def _chime_api(self, serial: str) -> "Hp7Api":
@@ -758,8 +777,11 @@ class Hp7Api:
         # a full minute. Writes invalidate the entry explicitly, and the
         # switches are optimistic (0.13.21), so the UI still reacts instantly.
         cached = self._chime_config_cache.get(serial)
-        if cached is not None and (time.monotonic() - cached[1]) < CHIME_CACHE_TTL:
+        now = time.monotonic()
+        if cached is not None and (now - cached[1]) < CHIME_CACHE_TTL:
             return cached[0]
+        if now < self._chime_retry_after.get(serial, 0.0):
+            return self._stale_chime(serial)
         try:
             result = api._client.get_dev_config(serial, 1, "ChimeMusic")
         except Exception as exc:  # noqa: BLE001
@@ -768,31 +790,51 @@ class Hp7Api:
                 serial,
                 exc,
             )
-            # Heuristic: cache "not found" answers for the whole session
-            # so we don't re-issue the same losing request every poll.
-            # Some failures surface with an EMPTY message (the pylocalapi
-            # HTTPError stringifies to ''), so we also cache any serial that
-            # fails N times in a row — otherwise a phantom monitor serial
-            # (e.g. CP5's BE9259083, #33) spams ~10 GETs every tick forever.
+            # "Not found" / "no access" answers are cached for the whole
+            # session so we don't re-issue the same losing request every
+            # poll. Other failures (cloud hiccups, timeouts, and the
+            # pylocalapi HTTPError that stringifies to '') only back off for
+            # a while after CHIME_FAIL_LIMIT in a row: that still keeps a
+            # phantom monitor serial (e.g. CP5's BE9259083, #33) from
+            # spamming ~10 GETs every tick, but a real monitor recovers on
+            # its own. The count used to never reset on success, so three
+            # scattered hiccups over a night took a working monitor offline
+            # until the next restart.
             text = (str(exc) or repr(exc)).lower()
-            self._chime_fail_counts[serial] = (
-                self._chime_fail_counts.get(serial, 0) + 1
-            )
+            first = self._chime_failing.get(serial, (now, ""))[0]
+            self._chime_failing[serial] = (first, str(exc) or repr(exc))
             if (
                 "2000" in text
                 or "not exist" in text
                 or "不存在" in text
                 or "403" in text
                 or "forbidden" in text
-                or self._chime_fail_counts[serial] >= 3
             ):
                 self._chime_dead_serials.add(serial)
                 _LOGGER.info(
                     "EZVIZ HP7: caching %s as unreachable for chime config "
-                    "(will skip until restart)",
+                    "(will skip until restart): %s",
                     serial,
+                    exc,
                 )
-            return None
+                return None
+            fails = self._chime_fail_counts.get(serial, 0) + 1
+            self._chime_fail_counts[serial] = fails
+            if fails >= CHIME_FAIL_LIMIT:
+                backoff = min(
+                    CHIME_RETRY_BACKOFF * 2 ** (fails - CHIME_FAIL_LIMIT),
+                    CHIME_RETRY_BACKOFF_MAX,
+                )
+                self._chime_retry_after[serial] = now + backoff
+                _LOGGER.info(
+                    "EZVIZ HP7: chime config for %s failed %d times in a row, "
+                    "retrying in %d s: %s",
+                    serial,
+                    fails,
+                    int(backoff),
+                    exc,
+                )
+            return self._stale_chime(serial)
         value = result.get("valueInfo") or result.get("value")
         if isinstance(value, str):
             try:
@@ -802,7 +844,36 @@ class Hp7Api:
                 return None
         if isinstance(value, dict):
             self._chime_config_cache[serial] = (value, time.monotonic())
+            self._chime_fail_counts.pop(serial, None)
+            self._chime_retry_after.pop(serial, None)
+            self._chime_failing.pop(serial, None)
             return value
+        return None
+
+    def chime_problem(self, serial: str) -> dict[str, Any] | None:
+        """Why ``serial``'s ChimeMusic can't be read, if worth a notice.
+
+        ``{"kind": "refused", "error": ...}`` when the cloud answered "not
+        found" / "no access" (not retried until reload), ``{"kind":
+        "failing", "minutes": ..., "error": ...}`` after CHIME_ISSUE_AFTER
+        without one good read, else None.
+        """
+        failing = self._chime_failing.get(serial)
+        if failing is None:
+            return None
+        first, error = failing
+        if serial in self._chime_dead_serials:
+            return {"kind": "refused", "error": error}
+        elapsed = time.monotonic() - first
+        if elapsed >= CHIME_ISSUE_AFTER:
+            return {"kind": "failing", "minutes": int(elapsed // 60), "error": error}
+        return None
+
+    def _stale_chime(self, serial: str) -> dict[str, Any] | None:
+        """Last good ChimeMusic if it is recent enough, else None."""
+        cached = self._chime_config_cache.get(serial)
+        if cached is not None and (time.monotonic() - cached[1]) < CHIME_STALE_MAX:
+            return cached[0]
         return None
 
     def _set_chime_fields(self, serial: str, **fields: int) -> bool:
