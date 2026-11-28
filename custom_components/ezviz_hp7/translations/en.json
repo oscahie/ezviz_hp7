@@ -431,6 +431,14 @@
     "cloud_offline": {
       "title": "EZVIZ cannot be reached",
       "description": "{title} started without the EZVIZ cloud. Only the live video over the local network (port 8000) works, with the IP address and key stored the last time the cloud answered. Events, unlocking, the hang-up button and the settings come back by themselves: the login is tried again every 5 minutes and the integration reloads when EZVIZ answers."
+    },
+    "monitor_settings_failing": {
+      "title": "Indoor monitor {serial}: settings not responding",
+      "description": "Home Assistant has not been able to read the settings of indoor monitor {serial} for {minutes} minutes. Last error: {error}\n\nThe monitor's ring switch, volume and ringtones show the last value read, or unknown. It keeps trying, less often over time (up to every 30 minutes), and this notice goes away by itself once a read works."
+    },
+    "monitor_settings_refused": {
+      "title": "Indoor monitor {serial}: settings refused by EZVIZ",
+      "description": "EZVIZ refused the settings of indoor monitor {serial} (error: {error}), so the monitor's ring switch, volume and ringtones stay unknown. This is not retried until the integration reloads.\n\nIf the error is 403 / no access, this entry probably uses an account the monitor is shared with: enter the monitor owner's account in Configure. If the device is not found, check the monitor serial number in Configure."
     }
   },
   "exceptions": {

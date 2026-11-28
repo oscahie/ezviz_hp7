@@ -62,10 +62,10 @@ def test_repeated_failures_back_off_then_retry(clock):
     api = _api()
     api._client.get_dev_config.side_effect = Exception("")
     for _ in range(3):
-        clock.t += 120
+        clock.t += 30
         api.get_chime_state(MONITOR)
     calls = api._client.get_dev_config.call_count
-    clock.t += 120
+    clock.t += 30
     api.get_chime_state(MONITOR)
     assert api._client.get_dev_config.call_count == calls
     clock.t += api_mod.CHIME_RETRY_BACKOFF
@@ -79,3 +79,40 @@ def test_no_access_answer_is_cached(clock):
     api._client.get_dev_config.side_effect = Exception("403 Client Error: Forbidden")
     api.get_chime_state(MONITOR)
     assert MONITOR in api._chime_dead_serials
+
+
+def test_backoff_grows_and_is_capped(clock):
+    api = _api()
+    api._client.get_dev_config.side_effect = Exception("timeout")
+    waits = []
+    for _ in range(12):
+        api.get_chime_state(MONITOR)
+        wait = api._chime_retry_after.get(MONITOR, clock.t) - clock.t
+        waits.append(wait)
+        clock.t += max(wait, 1.0)
+    grown = [w for w in waits if w > 0]
+    assert grown[0] == api_mod.CHIME_RETRY_BACKOFF
+    assert grown == sorted(grown)
+    assert max(grown) == api_mod.CHIME_RETRY_BACKOFF_MAX
+
+
+def test_problem_reported_after_an_hour_and_cleared(clock):
+    api = _api()
+    api._client.get_dev_config.side_effect = Exception("timeout")
+    api.get_chime_state(MONITOR)
+    assert api.chime_problem(MONITOR) is None
+    clock.t += api_mod.CHIME_ISSUE_AFTER + 1
+    problem = api.chime_problem(MONITOR)
+    assert problem["kind"] == "failing" and problem["minutes"] >= 60
+    api._client.get_dev_config.side_effect = None
+    api._client.get_dev_config.return_value = GOOD
+    api._chime_retry_after.clear()
+    assert api.get_chime_state(MONITOR) is True
+    assert api.chime_problem(MONITOR) is None
+
+
+def test_refused_is_reported_at_once(clock):
+    api = _api()
+    api._client.get_dev_config.side_effect = Exception("403 Client Error: Forbidden")
+    api.get_chime_state(MONITOR)
+    assert api.chime_problem(MONITOR)["kind"] == "refused"

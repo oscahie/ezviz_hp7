@@ -12,13 +12,15 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
-from .const import UPDATE_INTERVAL_SEC
+from .const import DOMAIN, UPDATE_INTERVAL_SEC
 
 # alarmType of a door-lock unlock record in the EZVIZ alarm list.
 ALARM_TYPE_UNLOCK_LOCK = 10242
 # Lock (10242) and gate (10243) openings, both kept in the unlock log.
 UNLOCK_LOG_TYPES = (10242, 10243)
 UNLOCK_LOG_MAX_AGE = 1800.0
+# Repairs notice id prefix for a monitor whose settings (ChimeMusic) fail.
+MONITOR_SETTINGS_ISSUE = "monitor_settings_"
 
 
 # Categories whose customerType is an enrolment name, not a method name.
@@ -213,6 +215,33 @@ class Hp7Coordinator(DataUpdateCoordinator):
             self.update_interval.total_seconds(), watching,
         )
 
+    def _sync_monitor_issues(self) -> None:
+        """Raise / clear a Repairs notice per monitor whose settings fail."""
+        from homeassistant.helpers import issue_registry as ir
+
+        monitors = self.monitor_serial
+        if isinstance(monitors, str):
+            monitors = [monitors]
+        for ms in monitors or []:
+            issue_id = f"{MONITOR_SETTINGS_ISSUE}{ms}"
+            problem = self.api.chime_problem(ms)
+            if problem is None:
+                ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+                continue
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key=f"monitor_settings_{problem['kind']}",
+                translation_placeholders={
+                    "serial": ms,
+                    "minutes": str(problem.get("minutes", "")),
+                    "error": str(problem.get("error") or "")[:200],
+                },
+            )
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch latest device status from API.
 
@@ -234,6 +263,7 @@ class Hp7Coordinator(DataUpdateCoordinator):
         except Exception as exc:  # noqa: BLE001
             data = None
             failure = str(exc)
+        self._sync_monitor_issues()
 
         if failure is not None:
             self._fail_streak += 1

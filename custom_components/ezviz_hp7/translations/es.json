@@ -431,6 +431,14 @@
     "cloud_offline": {
       "title": "No se puede contactar con EZVIZ",
       "description": "{title} ha arrancado sin la nube de EZVIZ. Solo funciona el vídeo en directo por la red local (puerto 8000), con la dirección IP y la clave guardadas la última vez que respondió la nube. Los eventos, la apertura, el botón de colgar y los ajustes vuelven solos: el inicio de sesión se reintenta cada 5 minutos y la integración se recarga cuando EZVIZ responde."
+    },
+    "monitor_settings_failing": {
+      "title": "Monitor interior {serial}: los ajustes no responden",
+      "description": "Home Assistant lleva {minutes} minutos sin poder leer los ajustes del monitor interior {serial}. Último error: {error}\n\nEl interruptor del timbre, el volumen y los tonos del monitor muestran el último valor leído, o desconocido. Sigue intentándolo, cada vez menos a menudo (hasta cada 30 minutos), y este aviso desaparece solo cuando una lectura funcione."
+    },
+    "monitor_settings_refused": {
+      "title": "Monitor interior {serial}: EZVIZ rechaza los ajustes",
+      "description": "EZVIZ ha rechazado los ajustes del monitor interior {serial} (error: {error}), así que el interruptor del timbre, el volumen y los tonos del monitor quedan en desconocido. No se reintenta hasta que se recargue la integración.\n\nSi el error es 403 / sin acceso, probablemente esta entrada usa una cuenta con la que se ha compartido el monitor: pon la cuenta propietaria en Configurar. Si el dispositivo no existe, revisa el número de serie del monitor en Configurar."
     }
   },
   "exceptions": {
